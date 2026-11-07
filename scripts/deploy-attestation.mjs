@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 const account = process.env.ZETRA_ATTESTATION_ACCOUNT?.trim().toLowerCase();
@@ -13,9 +14,15 @@ if (process.env.NEAR_TESTNET_PAYOUT_PRIVATE_KEY || process.env.NEAR_MAINNET_PAYO
 const build = spawnSync("npm", ["run", "contracts:build:near"], { stdio: "inherit", shell: process.platform === "win32" });
 if (build.status !== 0) process.exit(build.status ?? 1);
 
+const wasmPath = "contracts/target/wasm32-unknown-unknown/release/zetra_books_attestation.wasm";
+if (!existsSync(wasmPath)) {
+  console.error(`Contract build completed but the WASM artifact was not found at ${wasmPath}.`);
+  process.exit(1);
+}
+
 const args = [
   "contract", "deploy", account,
-  "use-file", "target/wasm32-unknown-unknown/release/zetra_books_attestation.wasm",
+  "use-file", wasmPath,
   "with-init-call", "new",
   "json-args", "{}",
   "prepaid-gas", "100 Tgas",
@@ -25,5 +32,8 @@ const args = [
   "send"
 ];
 console.log(`Deploying books-attestation to ${account} on NEAR testnet. The NEAR CLI will request confirmation.`);
-const result = spawnSync("near", args, { stdio: "inherit", shell: process.platform === "win32" });
+const nearInstalled = spawnSync("near", ["--version"], { stdio: "ignore", shell: process.platform === "win32" }).status === 0;
+const command = nearInstalled ? "near" : "npx";
+const commandArgs = nearInstalled ? args : ["--yes", "near-cli-rs", ...args];
+const result = spawnSync(command, commandArgs, { stdio: "inherit", shell: process.platform === "win32" });
 process.exit(result.status ?? 1);
