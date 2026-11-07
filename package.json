@@ -1,0 +1,50 @@
+{
+  "name": "zetra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zetra: NEAR-native invoices, payments, and automated books.",
+  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "backend/worker",
+    "backend/packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,worker,web -c blue,magenta,green \"npm run dev -w @zetra/api\" \"npm run dev -w @zetra/worker\" \"npm run dev -w @zetra/web\"",
+    "dev:api": "npm run dev -w @zetra/api",
+    "dev:worker": "npm run dev -w @zetra/worker",
+    "dev:web": "npm run dev -w @zetra/web",
+    "build": "npm run build -w @zetra/api && npm run build -w @zetra/worker && npm run build -w @zetra/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:contracts:near": "cargo test --manifest-path contracts/Cargo.toml -p zetra-books-attestation",
+    "verify": "npm run typecheck && npm run test:unit && npm run test:integration && npm run test:contracts:near && npm run contracts:build:near && npm run build",
+    "judge:setup": "node scripts/judge-setup.mjs",
+    "demo:seed": "tsx scripts/seed-demo.ts",
+    "demo:verify": "tsx scripts/verify-demo-accounting.ts",
+    "judge:verify": "npm run verify && npm run demo:verify",
+    "db:migrate": "tsx backend/packages/database/src/migrate.ts",
+    "db:reset": "tsx backend/packages/database/src/reset.ts && npm run db:migrate",
+    "openapi:write": "tsx backend/src/scripts/write-openapi.ts",
+    "webhook-receiver": "tsx scripts/webhook-receiver.ts",
+    "contracts:build:near": "cargo build --manifest-path contracts/Cargo.toml -p zetra-books-attestation --target wasm32-unknown-unknown --release",
+    "contracts:deploy:near": "node scripts/deploy-attestation.mjs",
+    "audit:ui": "node scripts/ui-audit.mjs",
+    "health:check": "node scripts/health-monitor.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "concurrently": "^9.2.1",
+    "esbuild": "^0.25.9",
+    "playwright": "^1.64.1",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

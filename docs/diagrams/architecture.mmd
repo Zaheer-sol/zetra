@@ -1,0 +1,7 @@
+flowchart LR
+  console[Zetra console] --> api[API]
+  public[Hosted payment page] --> api
+  worker[NEAR finality worker] --> near[NEAR RPC]
+  worker --> engine[Matching and accounting engine]
+  api --> db[(PostgreSQL)]
+  engine --> db

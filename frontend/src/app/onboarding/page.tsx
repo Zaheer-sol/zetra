@@ -1,0 +1,342 @@
+"use client";
+
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { Check, ExternalLink } from "lucide-react";
+import { Alert, Badge, Button, ButtonLink, Chain, CopyButton, Field, fieldErrors, Input, Logo, MoneyInput, Select, Spinner, TextLink } from "@/components/app-ui";
+import { Card } from "@/components/ui/card";
+import { Zeti, type ZetiMood } from "@/components/zeti";
+import { cn } from "@/lib/utils";
+import { api, newIdempotencyKey, useApi, type ApiError } from "@/lib/api";
+
+const NEAR_ACCOUNT = /^(?=.{2,64}$)[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
+const STEPS = ["Business", "Wallet", "Customer", "Invoice", "Share"] as const;
+// Zeti keeps the user company through setup: hello, careful with the wallet, curious about the
+// customer, focused on the invoice, and celebrating when the payment link is ready.
+const STEP_MOOD: ZetiMood[] = ["welcome", "focused", "curious", "focused", "success"];
+
+function Onboarding() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const creatingNew = params.get("new") === "1";
+  const { data: me, error: meError, mutate } = useApi<any>("/v1/me", { shouldRetryOnError: false });
+  const { data: networkOptions } = useApi<{ data: Array<{ key: string; family: string; name: string; assets: string[] }> }>("/v1/payment-networks");
+  const [step, setStep] = useState(0);
+  const [setup, setSetup] = useState<"books" | "collect" | "connect">("books");
+  const steps = setup === "books" ? STEPS.slice(0, 2) : STEPS;
+  const [error, setError] = useState<ApiError | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [business, setBusiness] = useState("");
+  const [wallet, setWallet] = useState({ name: "Main Wallet", address: "", network: "near:testnet" });
+  const [customer, setCustomer] = useState({ name: "", email: "", address: "" });
+  const [customerId, setCustomerId] = useState("");
+  const [invoice, setInvoice] = useState({ amount: "", title: "" });
+  const [created, setCreated] = useState<{ id: string; number: string; payment_url: string } | null>(null);
+  const [keys] = useState(() => ({ wallet: newIdempotencyKey(), invoice: newIdempotencyKey() }));
+  const errs = fieldErrors(error);
+  const selectedNetwork = networkOptions?.data.find((network) => network.key === wallet.network);
+  const addressValid = NEAR_ACCOUNT.test(wallet.address.trim());
+  const customerAddressValid = NEAR_ACCOUNT.test(customer.address.trim());
+  const invoiceAsset = selectedNetwork?.assets.includes("USDC") ? "USDC" : selectedNetwork?.assets[0] ?? "USDC";
+
+  useEffect(() => {
+    if (networkOptions && !networkOptions.data.some((network) => network.key === wallet.network)) {
+      setWallet((current) => ({ ...current, network: networkOptions.data[0]?.key ?? "" }));
+    }
+  }, [networkOptions, wallet.network]);
+
+  useEffect(() => {
+    if (meError?.status === 401) router.replace("/login?next=/onboarding");
+  }, [meError, router]);
+  useEffect(() => {
+    if (me?.organization && !creatingNew && step === 0) setStep(1);
+  }, [me, creatingNew, step]);
+
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError(e as ApiError);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const finishBooks = async () => {
+    await api("/v1/organization", { method: "PATCH", body: { onboarding_completed: true } });
+    router.push("/app/accounting");
+  };
+  // Orders come from the merchant's own store or backend: connect it, and Zetra takes it from there.
+  const finishConnect = async () => {
+    await api("/v1/organization", { method: "PATCH", body: { onboarding_completed: true } });
+    router.push("/app/developers/orders");
+  };
+
+  if (!me)
+    return (
+      <div className="grid min-h-[60vh] place-items-center">
+        <Spinner className="size-5 text-muted-foreground" />
+      </div>
+    );
+
+  return (
+    <div className="mx-auto max-w-[600px]">
+      <header className="mb-8 flex items-center justify-between gap-3">
+        <Logo />
+        {me.organization && (
+          <TextLink href="/app" className="text-sm">
+            Skip to console
+          </TextLink>
+        )}
+      </header>
+      <ol className="mb-5 flex gap-1.5 overflow-x-auto" aria-label="Setup progress">
+        {steps.map((s, i) => (
+          <li
+            key={s}
+            aria-current={i === step ? "step" : undefined}
+            className={cn(
+              "flex flex-1 items-center gap-2 border-b-2 pb-2.5 text-sm font-medium whitespace-nowrap text-muted-foreground",
+              i < step && "border-success text-foreground/80",
+              i === step && "border-primary text-foreground",
+              i > step && "border-border"
+            )}
+          >
+            <span className={cn("grid size-5 shrink-0 place-items-center rounded-full text-[11px]", i < step ? "bg-success text-white" : i === step ? "bg-primary text-primary-foreground" : "bg-muted")}>
+              {i < step ? <Check className="size-3 stroke-[3]" /> : i + 1}
+            </span>
+            <span className="max-sm:hidden">{s}</span>
+          </li>
+        ))}
+      </ol>
+
+      <Card className="onboarding-card gap-0 rounded-3xl p-9 max-sm:px-[18px] max-sm:py-[22px] [&_h1]:text-[1.875rem] [&_h1]:leading-tight [&_h1]:font-bold [&_h1]:tracking-[-0.03em]">
+        {error && !error.details && (
+          <div className="mb-4">
+            <Alert tone="danger">{error.message}</Alert>
+          </div>
+        )}
+
+        {/* Each step renders at once; a CSS slide (no fade) so a throttled or frozen animation never hides it. */}
+          <div key={step} className="animate-in slide-in-from-right-6 duration-300 motion-reduce:animate-none">
+            <Zeti mood={STEP_MOOD[step] ?? "welcome"} size={96} className="mb-4" priority />
+            {step === 0 && (
+              <form
+                className="grid gap-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  run(async () => {
+                    await api("/v1/organizations", { method: "POST", body: { name: business } });
+                    await mutate();
+                    setStep(1);
+                  });
+                }}
+              >
+                <div>
+                  <h1>What&rsquo;s your business called?</h1>
+                  <p className="mt-2 text-[1.0625rem] tracking-[-0.012em] text-muted-foreground">This name appears across your books and reports. Customers also see it on payment requests.</p>
+                </div>
+                <Field label="Business name" htmlFor="ob-business" error={errs.name}>
+                  <Input id="ob-business" className="h-11 rounded-xl text-[1.0625rem]" value={business} onChange={(e) => setBusiness(e.target.value)} autoFocus placeholder="Your business name" required />
+                </Field>
+                <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!business.trim()}>
+                  Continue
+                </Button>
+              </form>
+            )}
+
+            {step === 1 && (
+              <form
+                className="grid gap-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  run(async () => {
+                    // Coming back to setup (reload, back button) with a wallet already added: carry on with it.
+                    if (wallet.address.trim())
+                      await api("/v1/wallets", { method: "POST", idempotencyKey: keys.wallet, body: { name: wallet.name, network: wallet.network, address: wallet.address.trim(), assets: selectedNetwork?.assets.includes("USDC") ? ["USDC"] : selectedNetwork?.assets.slice(0, 1) } }).catch((e) => {
+                        if ((e as ApiError).code !== "wallet_exists") throw e;
+                      });
+                    if (setup === "books") await finishBooks();
+                    else if (setup === "connect") await finishConnect();
+                    else setStep(2);
+                  });
+                }}
+              >
+                <div>
+                  <h1>How would you like to start?</h1>
+                  <p className="mt-2 text-[1.0625rem] tracking-[-0.012em] text-muted-foreground">Choose the first job you want Zetra to handle. You can turn on the rest from the console later.</p>
+                </div>
+                <fieldset className="grid gap-2" disabled={busy}>
+                  <legend className="mb-2 text-sm font-medium">Choose your starting point</legend>
+                  {([
+                    ["books", "Set up my books", "Start with the ledger, bills, expenses and reports. Add payment collection when you need it."],
+                    ["collect", "Collect my first payment", "Connect a wallet, add a customer and create a hosted payment request."],
+                    ["connect", "Connect a store or checkout", "Send orders from your existing system so Zetra can match and account for their payments."]
+                  ] as const).map(([value, title, description]) => (
+                    <label key={value} className={cn("flex cursor-pointer items-start gap-3 rounded-xl border p-4", setup === value && "border-primary bg-primary/5")}>
+                      <input type="radio" name="setup" value={value} checked={setup === value} onChange={() => setSetup(value)} className="mt-1 accent-[var(--primary)]" />
+                      <span><span className="block font-medium">{title}</span><span className="mt-1 block text-sm text-muted-foreground">{description}</span></span>
+                    </label>
+                  ))}
+                </fieldset>
+                <p className="text-sm text-muted-foreground">Zetra reads public activity on configured networks. Funds and signing authority stay in your wallet.</p>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <Badge tone="info">Test mode</Badge>
+                  {selectedNetwork ? (
+                    <>
+                      <Chain network={wallet.network} name={selectedNetwork.name} />
+                      <span className="text-muted-foreground text-sm">· {selectedNetwork.assets.join(", ")}</span>
+                    </>
+                  ) : <span className="text-sm text-muted-foreground">No test networks are enabled.</span>}
+                </div>
+                {networkOptions && networkOptions.data.length > 1 && (
+                  <Field label="Test network" htmlFor="ob-network">
+                    <Select id="ob-network" value={wallet.network} onValueChange={(network) => setWallet((current) => ({ ...current, network }))} options={networkOptions.data.map((network) => ({ value: network.key, label: network.name }))} />
+                  </Field>
+                )}
+                <Field
+                  label="Public wallet address"
+                  htmlFor="ob-address"
+                  error={errs.address ?? (wallet.address && !addressValid ? "Enter a valid NEAR account ID." : null)}
+                  optional={setup !== "collect"}
+                  hint={setup === "collect" ? "The wallet your customers pay. Paste the public address or account ID only. Zetra never asks for a private key or seed phrase." : "You can add it later. Zetra only sees payments to wallets you've added. Paste the public address or account ID only."}
+                >
+                  <Input
+                    id="ob-address"
+                    className="h-11 rounded-xl font-mono"
+                    value={wallet.address}
+                    onChange={(e) => setWallet((w) => ({ ...w, address: e.target.value }))}
+                    placeholder="account.near"
+                    spellCheck={false}
+                    required={setup === "collect"}
+                  />
+                </Field>
+                <Field label="Name" htmlFor="ob-wname">
+                  <Input id="ob-wname" value={wallet.name} onChange={(e) => setWallet((w) => ({ ...w, name: e.target.value }))} />
+                </Field>
+                <Alert tone="neutral">You start in test mode. Use the console switch to access live data.</Alert>
+                <Button type="submit" variant="primary" size="lg" loading={busy} disabled={(setup === "collect" && (!selectedNetwork || !selectedNetwork.assets.length || !wallet.address.trim())) || (!!wallet.address.trim() && (!selectedNetwork || !selectedNetwork.assets.length || !addressValid))}>
+                  {setup === "books" ? "Open my books" : setup === "connect" ? "Connect my store" : "Continue"}
+                </Button>
+              </form>
+            )}
+
+            {step === 2 && (
+              <form
+                className="grid gap-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  run(async () => {
+                    const c = await api<{ id: string }>("/v1/customers", {
+                      method: "POST",
+                      body: { name: customer.name, email: customer.email || undefined, wallet_addresses: customer.address ? [{ address: customer.address.trim(), network: wallet.network }] : [] }
+                    });
+                    setCustomerId(c.id);
+                    setStep(3);
+                  });
+                }}
+              >
+                <div>
+                  <h1>Add the customer you want to bill</h1>
+                  <p className="mt-2 text-[1.0625rem] tracking-[-0.012em] text-muted-foreground">
+                    A known sender address strengthens the match. Leave it blank if you do not have one; uncertain payments will wait for review.
+                  </p>
+                </div>
+                <Field label="Customer name" htmlFor="ob-cname" error={errs.name}>
+                  <Input id="ob-cname" value={customer.name} onChange={(e) => setCustomer((c) => ({ ...c, name: e.target.value }))} autoFocus placeholder="Acme Ltd" required />
+                </Field>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Billing email" htmlFor="ob-cemail" optional>
+                    <Input id="ob-cemail" type="email" value={customer.email} onChange={(e) => setCustomer((c) => ({ ...c, email: e.target.value }))} />
+                  </Field>
+                  <Field label="Their wallet address" htmlFor="ob-caddr" optional hint={`Address on ${selectedNetwork?.name ?? "the selected network"}.`} error={errs["wallet_addresses.0.address"] ?? (customer.address && !customerAddressValid ? "Enter a valid NEAR account ID." : null)}>
+                    <Input id="ob-caddr" className="font-mono text-[0.92em]" value={customer.address} onChange={(e) => setCustomer((c) => ({ ...c, address: e.target.value }))} placeholder="account.near" spellCheck={false} />
+                  </Field>
+                </div>
+                <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!customer.name.trim() || (!!customer.address.trim() && !customerAddressValid)}>
+                  Continue
+                </Button>
+              </form>
+            )}
+
+            {step === 3 && (
+              <form
+                className="grid gap-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  run(async () => {
+                    const inv = await api<any>("/v1/invoices", {
+                      method: "POST",
+                      idempotencyKey: keys.invoice,
+                      body: { customer_id: customerId, amount: invoice.amount, title: invoice.title.trim(), asset: invoiceAsset, network: wallet.network }
+                    });
+                    setCreated(inv);
+                    setStep(4);
+                  });
+                }}
+              >
+                <div>
+                  <h1>Create your first payment request</h1>
+                  <p className="mt-2 text-[1.0625rem] tracking-[-0.012em] text-muted-foreground">This request will collect USDC on the configured network into the wallet you just connected.</p>
+                </div>
+                <Field label="Amount" htmlFor="ob-amount" error={errs.amount}>
+                  <MoneyInput id="ob-amount" large suffix={invoiceAsset} value={invoice.amount} onChange={(amount) => setInvoice((i) => ({ ...i, amount }))} placeholder="2,000.00" autoFocus required />
+                </Field>
+                <Field label="What is this payment for?" htmlFor="ob-desc" hint="Your customer sees this before paying.">
+                  <Input id="ob-desc" value={invoice.title} onChange={(e) => setInvoice((i) => ({ ...i, title: e.target.value }))} placeholder="September Infrastructure Services" maxLength={140} required />
+                </Field>
+                <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!invoice.title.trim() || !/^(0|[1-9]\d*)(\.\d{1,6})?$/.test(invoice.amount) || Number(invoice.amount) <= 0}>
+                  Create payment request
+                </Button>
+              </form>
+            )}
+
+            {step === 4 && created && (
+              <div className="grid gap-4">
+                <div>
+                  <div className="mb-3 grid size-12 place-items-center rounded-full bg-success/12 text-success">
+                    <Check className="size-[22px]" />
+                  </div>
+                  <h1>{created.number} is ready to send</h1>
+                  <p className="mt-2 text-[1.0625rem] tracking-[-0.012em] text-muted-foreground">
+                    Share this link with your customer. Zetra tracks the payment through settlement, matching, invoice balance and journal entry.
+                  </p>
+                </div>
+                <div className="flex min-w-0 items-center gap-1.5 rounded-xl bg-muted px-3.5 py-3">
+                  <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{created.payment_url}</span>
+                  <CopyButton value={created.payment_url} label="Copy payment link" />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <ButtonLink href={created.payment_url} target="_blank" rel="noreferrer" size="lg" icon={<ExternalLink aria-hidden="true" />}>
+                    Open payment page
+                  </ButtonLink>
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    onClick={async () => {
+                      await api("/v1/organization", { method: "PATCH", body: { onboarding_completed: true } }).catch(() => undefined);
+                      router.push(`/app/invoices/${created.id}`);
+                    }}
+                  >
+                    Open invoice
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">You can pay with the configured test-network asset or run a simulation from the invoice page. Simulations use the same matching, event and accounting services without moving funds.</p>
+              </div>
+            )}
+          </div>
+      </Card>
+    </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <main id="main" className="min-h-screen px-5 py-8">
+      <Suspense>
+        <Onboarding />
+      </Suspense>
+    </main>
+  );
+}

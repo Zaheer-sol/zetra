@@ -1,0 +1,15 @@
+[package]
+name = "zetra-books-attestation"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "=5.23.0"
+
+[dev-dependencies]
+near-sdk = { version = "=5.23.0", features = ["unit-testing"] }

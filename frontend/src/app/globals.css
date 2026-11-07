@@ -1,0 +1,194 @@
+@import "tailwindcss" source(none);
+@source "..";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  Zetra theme for shadcn/ui.
+  Standard shadcn tokens with a fixed deep-navy palette, royal-blue actions, and
+  emerald, amber and red status accents.
+  Extra semantic tokens (success, warning, info, base) back payment statuses.
+*/
+
+:root {
+  color-scheme: dark;
+  --radius: 0.75rem;
+
+  --background: #0b1422;
+  --foreground: #edf7f5;
+  --card: #132336;
+  --card-foreground: #edf7f5;
+  --popover: #172b3e;
+  --popover-foreground: #edf7f5;
+  --primary: #4b8dff;
+  --primary-foreground: #06152b;
+  --secondary: #1d3448;
+  --secondary-foreground: #e7f6f3;
+  --muted: #193044;
+  --muted-foreground: #a6bdc8;
+  --accent: #20495a;
+  --accent-foreground: #eefcfb;
+  --destructive: #fb7185;
+  --destructive-foreground: #ffffff;
+  --border: #29455a;
+  --input: #36566d;
+  --ring: #70a7ff;
+
+  --success: #3ddc97;
+  --warning: #f8be5c;
+  --info: #6bbdff;
+  --base: #b78cff;
+  --brand: #4b8dff;
+  --brand-strong: #2365de;
+  --brand-soft: rgba(75, 141, 255, 0.16);
+  --icon-muted: #7896a6;
+
+  --chart-1: #4b8dff;
+  --chart-2: #5fc8ff;
+  --chart-3: #f8be5c;
+  --chart-4: #b78cff;
+  --chart-5: #fb7185;
+
+  --sidebar: rgba(9, 20, 33, 0.94);
+  --sidebar-foreground: #edf7f5;
+  --sidebar-primary: #70a7ff;
+  --sidebar-primary-foreground: #06152b;
+  --sidebar-accent: rgba(75, 141, 255, 0.14);
+  --sidebar-accent-foreground: #eefcfb;
+  --sidebar-border: #20394d;
+  --sidebar-ring: #70a7ff;
+
+  --material: rgba(12, 29, 46, 0.84);
+  --card-shadow: 0 0 0 0.5px rgba(237, 247, 245, 0.08), 0 1px 3px rgba(0, 0, 0, 0.32);
+  --overlay-shadow: 0 0 0 0.5px rgba(237, 247, 245, 0.1), 0 24px 60px rgba(0, 0, 0, 0.52), 0 8px 20px rgba(0, 0, 0, 0.36);
+  --raised-shadow: 0 0 0 0.5px rgba(237, 247, 245, 0.09), 0 8px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --logo-bg: #d9fff7;
+  --logo-fg: #0b1925;
+}
+
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", var(--font-inter), "Helvetica Neue", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, var(--font-mono-face), Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-base: var(--base);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-material: var(--material);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 10px);
+  --radius-3xl: calc(var(--radius) + 16px);
+
+  --ease-apple: cubic-bezier(0.32, 0.72, 0, 1);
+  --shadow-card: var(--card-shadow);
+  --shadow-overlay: var(--overlay-shadow);
+  --shadow-raised: var(--raised-shadow);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    background-image: radial-gradient(circle at 12% -10%, rgba(75, 141, 255, 0.12), transparent 34rem);
+    font-size: 0.875rem;
+    line-height: 1.47;
+    letter-spacing: -0.006em;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.022em;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+
+  svg.lucide {
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: color 180ms ease, transform 180ms ease;
+  }
+
+  [data-slot="button"]:hover > svg.lucide,
+  [data-slot="sidebar-menu-button"]:hover > svg.lucide {
+    transform: translateY(-0.5px);
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .material {
+    background: var(--material);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .icon-tile {
+    display: grid;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--primary) 24%, transparent);
+    background: linear-gradient(145deg, color-mix(in srgb, var(--primary) 18%, var(--card)), var(--card));
+    color: var(--primary);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--primary) 8%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

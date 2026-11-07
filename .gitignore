@@ -1,0 +1,17 @@
+node_modules
+.next
+dist
+coverage
+.env
+.env.local
+*.log
+playwright-report
+test-results
+contracts/target
+.DS_Store
+backend/*/dist
+backend/packages/*/dist
+.next-*
+tmp/
+*.tsbuildinfo
+.vscode/settings.json

@@ -1,0 +1,9 @@
+process.env.NODE_ENV = "test";
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? "postgresql://zetra_app:zetra_app@localhost:5432/zetra_test";
+process.env.TEST_MIGRATION_DATABASE_URL ??= "postgresql://zetra:zetra@localhost:5432/zetra_test";
+process.env.SESSION_SECRET ??= "test-session-secret-that-is-long-enough-for-zetra";
+process.env.ENCRYPTION_KEY ??= "11".repeat(32);
+process.env.NEAR_TESTNET_ENABLED ??= "true";
+process.env.NEAR_TESTNET_START_HEIGHT ??= "1";
+process.env.NEAR_TESTNET_USDC_CONTRACT_ID ??= "usdc.fakes.testnet";
+process.env.WEBHOOK_ALLOW_PRIVATE_URLS ??= "true";
