@@ -16,6 +16,13 @@ const pools = new Map<string, pg.Pool>();
 export function databaseUrl(): string {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set. Copy .env.example to .env and start Postgres with `docker compose up -d`.");
+  const appPassword = process.env.APP_DB_PASSWORD;
+  if (appPassword) {
+    const appUrl = new URL(url);
+    appUrl.username = "zetra_app";
+    appUrl.password = appPassword;
+    return appUrl.toString();
+  }
   return url;
 }
 

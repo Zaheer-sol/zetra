@@ -7,6 +7,7 @@ import { ingestObservation, type WalletRef } from "./pipeline";
 interface NearWallet extends WalletRef {
   network_id: string;
   monitor_from_block: string | null;
+  requested_backfill_from_block: string | null;
   asset_ids: string[];
 }
 
@@ -51,9 +52,31 @@ export class NearChainIngestor {
       const assetsByContract = new Map(config.assets.map((asset) => [asset.contractId, asset]));
       const headReport = await data.getLatestFinalBlock(tokenContracts, monitoredAccounts);
       const head = headReport.block;
-      const cursor = await this.readNextHeight(config.startHeight);
+      let cursor = await this.readNextHeight(config.startHeight);
+      const cursorBeforeBackfill = cursor.height;
+      const requestedBackfill = this.earliestRequestedBackfill(wallets, config.startHeight);
+      if (requestedBackfill !== null && requestedBackfill < cursor.height) {
+        await this.rewindCursor(cursor.height, requestedBackfill);
+        cursor = { height: requestedBackfill, blockHash: null };
+      }
       const next = cursor.height;
       let previousHash = cursor.blockHash;
+      // The network cursor is shared by every wallet. A backfill for one wallet can therefore
+      // rewind it before another wallet was registered; keep each wallet's own monitoring start
+      // as the authoritative lower bound so we do not attach older transfers to a new wallet.
+      const walletStartBlocks = new Map(
+        wallets.map((wallet) => {
+          const requested = wallet.requested_backfill_from_block === null
+            ? null
+            : BigInt(wallet.requested_backfill_from_block) < config.startHeight
+              ? config.startHeight
+              : BigInt(wallet.requested_backfill_from_block);
+          const start = wallet.monitor_from_block === null
+            ? requested ?? cursorBeforeBackfill
+            : BigInt(wallet.monitor_from_block);
+          return [wallet.id, start] as const;
+        })
+      );
       fromHeight = next;
       if (!wallets.length) {
         // Stay at the finalized head before the first wallet is connected. The conditional update
@@ -63,8 +86,10 @@ export class NearChainIngestor {
       }
       await withSystem((client) =>
         client.query(
-          "UPDATE wallets SET monitor_from_block = $2 WHERE network_id = $1 AND monitoring_enabled AND archived_at IS NULL AND monitor_from_block IS NULL",
-          [config.id, next.toString()]
+          `UPDATE wallets
+              SET monitor_from_block = GREATEST(COALESCE(requested_backfill_from_block, $2::bigint), $3::bigint)
+            WHERE network_id = $1 AND monitoring_enabled AND archived_at IS NULL AND monitor_from_block IS NULL`,
+          [config.id, next.toString(), config.startHeight.toString()]
         )
       );
       let height = next;
@@ -110,6 +135,8 @@ export class NearChainIngestor {
           const wallet = wallets.find((candidate) => candidate.address === event.receiverAccountId);
           const asset = assetsByContract.get(event.tokenContractId);
           if (!wallet || !asset || !wallet.asset_ids.includes(asset.id)) continue;
+          const walletStart = walletStartBlocks.get(wallet.id);
+          if (walletStart !== undefined && block.height < walletStart) continue;
           const result = await withTenant(wallet.organization_id, (client) =>
             ingestObservation(
               client,
@@ -187,7 +214,8 @@ export class NearChainIngestor {
     return withSystem(async (client) => {
       const rows = await client.query(
         `SELECT w.id, w.organization_id, w.environment, w.network_id, w.name, w.address,
-                w.monitor_from_block, array_agg(wa.asset_id ORDER BY wa.asset_id) AS asset_ids
+                w.monitor_from_block, w.requested_backfill_from_block,
+                array_agg(wa.asset_id ORDER BY wa.asset_id) AS asset_ids
            FROM wallets w JOIN wallet_assets wa ON wa.wallet_id = w.id
           WHERE w.network_id = $1 AND w.monitoring_enabled AND w.archived_at IS NULL
           GROUP BY w.id`,
@@ -211,6 +239,28 @@ export class NearChainIngestor {
       );
       if (!cursor.rows[0]) throw new Error(`Missing NEAR cursor for ${this.networkId}`);
       return { height: BigInt(cursor.rows[0].next_block_number), blockHash: cursor.rows[0].block_hash };
+    });
+  }
+
+  private earliestRequestedBackfill(wallets: readonly NearWallet[], startHeight: bigint): bigint | null {
+    const requested = wallets
+      .map((wallet) => wallet.requested_backfill_from_block)
+      .filter((value): value is string => value !== null)
+      .map((value) => BigInt(value))
+      .map((value) => value < startHeight ? startHeight : value);
+    return requested.length ? requested.reduce((minimum, value) => value < minimum ? value : minimum) : null;
+  }
+
+  private async rewindCursor(expectedHeight: bigint, targetHeight: bigint): Promise<void> {
+    await withSystem(async (client) => {
+      const result = await client.query(
+        `UPDATE network_cursors
+            SET next_block_number = $3, block_hash = NULL, updated_at = now(),
+                lease_expires_at = now() + interval '30 seconds', last_error = NULL, last_error_at = NULL
+          WHERE network_id = $1 AND lease_owner = $2 AND next_block_number = $4`,
+        [this.networkId, this.workerId, targetHeight.toString(), expectedHeight.toString()]
+      );
+      if (result.rowCount !== 1) throw new Error(`NEAR cursor lease lost or advanced concurrently for ${this.networkId}`);
     });
   }
 
@@ -239,6 +289,12 @@ export class NearChainIngestor {
         [this.networkId, this.workerId, nextHeight.toString(), blockHash, expectedHeight.toString()]
       );
       if (result.rowCount !== 1) throw new Error(`NEAR cursor lease lost or advanced concurrently for ${this.networkId}`);
+      await client.query(
+        `UPDATE wallets
+            SET requested_backfill_from_block = NULL, updated_at = now()
+          WHERE network_id = $1 AND requested_backfill_from_block IS NOT NULL AND requested_backfill_from_block < $2::bigint`,
+        [this.networkId, nextHeight.toString()]
+      );
     });
   }
 

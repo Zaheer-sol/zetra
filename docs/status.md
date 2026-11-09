@@ -10,7 +10,9 @@
 - Invoice, payment, receivable, payable and general-ledger workflows.
 - Trial balance, profit and loss, balance sheet, cash flow and aging reports.
 - Deterministic demo seed and accounting proof (`npm run demo:verify`).
-- Native Rust books-attestation contract tests and WASM build.
+- Native Rust books-attestation contract tests and WASM build; deployed on NEAR testnet at
+  `zetra-books-electron.testnet` in transaction
+  [`FVxHsUkb8VJuGDC6xn82cXCw4MDCVbWzuEi3WHCREwwS`](https://explorer.testnet.near.org/transactions/FVxHsUkb8VJuGDC6xn82cXCw4MDCVbWzuEi3WHCREwwS).
 - Canonical payment-event schema and adapter boundary for processor sources; direct NEAR remains the
   chain settlement path while Stripe uses the processor clearing path below.
 - Provider-neutral payment-source registry and signed canonical-event ingress. Events are retained
@@ -22,8 +24,10 @@
 - Stripe Checkout creation and signed Stripe webhook ingestion for USD receipts. Stripe receipts are
   stored as immutable processor evidence, allocated to Zetra invoices and posted through a clearing
   account before application; Checkout and PaymentIntent webhook duplicates are database-deduplicated.
-- Approval-gated outgoing NEAR NEP-141 transfers and refunds, with idempotency, worker retries and
-  final transaction evidence. Signing keys stay outside the database and source tree.
+- Approval-gated outgoing NEAR NEP-141 transfers and refunds, with idempotent requests and final
+  transaction evidence. Interrupted submissions require chain inspection before an operator retries
+  them; the worker never risks an automatic duplicate payment. Signing keys stay outside the
+  database and source tree.
 - Exact NEAR gas evidence from finalized transfer outcomes. Gas is posted to Network Fees only when
   a dated NEAR/USD valuation (or the explicit `NEAR_FEE_USD_RATE` fallback) exists; otherwise an
   accounting issue is raised instead of inventing a value.
@@ -51,5 +55,4 @@ The repository makes no claim that this funded run has occurred. Follow
 - A funded testnet run with a real Stripe webhook and a real outgoing NEAR transfer. The code path
   is implemented, but it cannot be truthfully called live until the operator supplies runtime
   secrets, funds a dedicated signer wallet and executes the run.
-- A public attestation deployment and independent external audit. Deployment is automated; audit
-  cannot be performed by source code alone.
+- Independent external audit of the deployed attestation contract.

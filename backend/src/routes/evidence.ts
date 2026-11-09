@@ -62,7 +62,7 @@ export function evidenceRoutes(app: FastifyInstance) {
     handler: ({ tx, params, organizationId, environment }) => tx(async (c) => {
       const invoice = (await c.query("SELECT id, number, title FROM invoices WHERE id = $1 AND organization_id = $2 AND environment = $3", [params.id, organizationId, environment])).rows[0];
       if (!invoice) throw notFound("invoice");
-      const payments = (await c.query("SELECT id FROM payments WHERE invoice_id = $1 OR provisional_invoice_id = $1 ORDER BY created_at, id", [params.id])).rows as Row[];
+      const payments = (await c.query("SELECT id, source FROM payments WHERE invoice_id = $1 OR provisional_invoice_id = $1 ORDER BY created_at, id", [params.id])).rows as Row[];
       const graphs = [];
       for (const p of payments) graphs.push(await paymentEvidence(c, p.id, organizationId, environment));
       return { object: "evidence_graph", subject: { type: "invoice", id: invoice.id, number: invoice.number, title: invoice.title }, simulated: payments.length > 0 && payments.every((p) => p.source === "simulated"), payments: graphs };

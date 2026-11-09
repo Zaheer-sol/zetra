@@ -14,13 +14,14 @@ export const runtime = "nodejs";
 const HOP_BY_HOP = new Set(["host", "connection", "content-length", "transfer-encoding", "keep-alive", "upgrade", "proxy-connection", "te", "trailer"]);
 
 /**
- * API_INTERNAL_URL is normally a full URL. A bare host is also accepted and used over HTTPS.
+ * API_INTERNAL_URL is normally a full URL. A bare host is also accepted; internal Render
+ * service references set API_INTERNAL_PROTOCOL=http because private traffic stays on Render's network.
  */
 function apiBase(value = process.env.API_INTERNAL_URL): string {
   const v = (value ?? "").trim().replace(/\/$/, "");
   if (!v) return "http://localhost:4000";
   if (/^https?:\/\//.test(v)) return v;
-  return `https://${v}`;
+  return `${process.env.API_INTERNAL_PROTOCOL === "http" ? "http" : "https"}://${v}`;
 }
 
 const NETWORK_RETRY_WINDOW_MS = 75_000;

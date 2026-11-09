@@ -5,8 +5,8 @@ import { motion, useMotionValue, useReducedMotion, useSpring, useTransform, type
 import { cn } from "@/lib/utils";
 import { ZETI_ART } from "./zeti-eyes";
 
-// Zeti, Zetra's mascot. Official renders live in docs/brand/zeti/; scripts/prepare-zeti.py makes the
-// web images (public/zeti/) and finds the eyes (zeti-eyes.ts) so Zeti can blink.
+// Zeti, Zetra's mascot. Optimized runtime images live in public/zeti; zeti-eyes.ts stores
+// the eye geometry used for blinking.
 //
 // Zeti stays grounded: no bouncing. It breathes, sways gently from its feet, blinks now and then,
 // its eyes drift continuously (toward the pointer when it moves) and it turns a little toward the

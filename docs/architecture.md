@@ -18,10 +18,10 @@ Zetra is a non-custodial NEAR payment-reconciliation and accounting service.
 
 The application uses only NEAR network identities: `near:testnet` and `near:mainnet`.
 
-The provider-neutral payment-source boundary can retain signed canonical events from a future
-processor, but it only enters this path when the event carries verifiable NEAR settlement evidence.
-That keeps external routing and provider credentials at the edge while the observation, finality,
-matching and books remain one deterministic system of record.
+The provider-neutral payment-source boundary retains signed canonical settlement events. Events
+that claim NEAR settlement enter the chain path only when they carry verifiable NEAR evidence.
+Processor-native receipts, such as Stripe, use a separate clearing-account path and never masquerade
+as NEAR transactions. Both paths retain immutable source evidence and post into the same ledger.
 
 ## Accounting path
 

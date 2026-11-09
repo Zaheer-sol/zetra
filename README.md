@@ -1,67 +1,79 @@
 # Zetra
 
-Zetra turns finalized NEAR stablecoin receipts into reconciled invoices and balanced accounting
-records. A business keeps custody of its wallet; Zetra observes supported NEP-141 transfers, matches
-them conservatively, and sends uncertain receipts to review instead of guessing.
+Zetra is an audit-grade, non-custodial stablecoin subledger for NEAR. It observes finalized
+NEP-141 transfers sent directly to a business account, reconciles them against invoices, and posts
+balanced accounting entries without taking custody of funds or storing customer private keys.
 
-Zetra is intended for the **Real-World Money** track of the 2026 NEAR Hackathon.
+## How it works
 
-## What works now
-
-| Capability | Status | How to verify |
-| --- | --- | --- |
-| Direct NEP-141 payment instructions and wallet checkout | Implemented | Open any seeded invoice and its hosted payment page |
-| Finalized NEAR transfer ingestion | Implemented | Unit and integration tests in `npm run verify`; live use requires network configuration |
-| Deterministic invoice matching and review queue | Implemented | Seeded exact and unidentified payment examples |
-| Double-entry payment accounting | Implemented | `npm run demo:verify` |
-| Trial balance, P&L, balance sheet, cash flow and aging | Implemented | Dashboard and `npm run demo:verify` |
-| Accountant CSV exports | Implemented | Books → Export, or the verification command |
-| NEAR books-attestation contract | Implemented and tested, not deployed | `npm run test:contracts:near` |
-| Stripe Checkout and signed receipt reconciliation | Implemented; requires Stripe runtime secrets | `POST /v1/invoices/:id/stripe-checkout` and Stripe webhook route |
-| Approval-gated outgoing NEAR transfers and refunds | Implemented; requires a funded dedicated signer | `POST /v1/payouts` then approve, or `POST /v1/payments/:id/refund` |
-| NEAR gas-fee evidence and accounting | Implemented; requires a NEAR/USD valuation | `network_fee_records` and Network Fees journal entries |
-| Attestation deployment automation | Implemented; not deployed here | `ZETRA_ATTESTATION_ACCOUNT=... npm run contracts:deploy:near` |
-| Proof-of-Close packages and verification | Implemented; contract publication remains optional | Books → closed period → Proof of Close, or `/v1/accounting/close-packages/*` |
-| Payment/invoice evidence graph | Implemented | `/v1/payments/:id/evidence` and `/v1/invoices/:id/evidence` |
-| Reconciliation stress scenarios | Implemented in test mode | Developers → Test payments, or `/v1/test/scenarios` |
-| A funded end-to-end testnet payment | Requires operator run | See `docs/testnet-runbook.md` |
-| NEAR Intents / 1Click routing | Not integrated | Direct NEP-141 is the current payment path |
-
-No deployed contract address or historical transaction is claimed in this repository.
-
-### Proof of Close
-
-After a period is closed, Zetra can build a deterministic close package containing the posted
-journal entry IDs and hashes, payment evidence IDs, report totals and export metadata. The package
-is canonicalized and hashed with SHA-256; timestamps and secrets are excluded. Previewing and
-verifying a package never submits a transaction. Attestation only submits when the deployment has
-an explicitly configured contract, signer and private key, and the returned NEAR transaction is
-stored verbatim.
-
-```bash
-curl -H "Authorization: Bearer sk_test_…" \
-  "http://localhost:4000/v1/accounting/close-packages/preview?month=2026-10"
+```text
+Customer wallet
+    │ NEP-141 ft_transfer
+    ▼
+Business-owned NEAR account
+    │ finalized block evidence
+    ▼
+Zetra ingestion → matching/review → invoice allocation → journal entries → reports and exports
 ```
 
-Test-mode stress scenarios are deliberately labelled `Simulation — no on-chain transaction.`
-They exercise the same observation, matching, exception, reconciliation and accounting pipeline as
-real evidence.
+The hosted checkout prepares the transfer in the customer's NEAR wallet. The worker then reads
+finalized NEAR data, accepts only configured token contracts and monitored receiving accounts, and
+stores the transaction, block, receipt and transfer evidence. Deterministic rules either reconcile
+the payment or create a review exception; uncertain payments are never silently matched.
 
-## Run the judge demo
+## Current capabilities
 
-Prerequisites: Node.js 22+, npm, Docker with Compose, and Rust with the
-`wasm32-unknown-unknown` target.
+| Capability | Status |
+| --- | --- |
+| Direct NEP-141 payment instructions and wallet checkout | Implemented |
+| Finalized NEAR transfer ingestion | Implemented; live use requires network configuration |
+| Exact, partial, split, overpaid, duplicate and exception handling | Implemented |
+| Double-entry payment accounting | Implemented |
+| Trial balance, P&L, balance sheet, cash flow and aging reports | Implemented |
+| Accountant CSV exports | Implemented |
+| Payment and invoice evidence timelines | Implemented |
+| Deterministic period-close packages and local verification | Implemented |
+| Optional NEAR books-attestation contract | Deployed to NEAR testnet; not externally audited |
+| Stripe Checkout and successful-receipt reconciliation | Implemented; requires Stripe secrets |
+| Approval-gated outgoing NEAR transfers and refunds | Implemented; requires a funded dedicated signer |
+| NEAR gas evidence and accounting | Implemented when a NEAR/USD valuation is available |
+| NEAR Intents / 1Click routing | Not integrated |
+
+The books-attestation contract is deployed at `zetra-books-electron.testnet`. Deployment transaction:
+[`FVxHsUkb8VJuGDC6xn82cXCw4MDCVbWzuEi3WHCREwwS`](https://explorer.testnet.near.org/transactions/FVxHsUkb8VJuGDC6xn82cXCw4MDCVbWzuEi3WHCREwwS).
+This proves contract deployment only; it does not claim a funded merchant payment has been
+reconciled on testnet. Test-mode payments are always labelled as simulations.
+
+### Important operational boundaries
+
+- Stripe success receipts post through a processor-clearing account. Refund and dispute events are
+  retained, but their accounting reversal workflow is not yet complete.
+- Outgoing transfers wait for NEAR finality. An interrupted submission is not automatically retried,
+  because doing so without first checking the chain could pay the recipient twice.
+- The attestation contract is optional and has not been externally audited.
+- The application rate limiter is process-local; multi-instance production deployments need a
+  shared rate-limit store.
+
+## Run locally
+
+### Prerequisites
+
+- Node.js 22 or newer
+- npm
+- Docker with Compose
+- Rust with the `wasm32-unknown-unknown` target for contract builds
+
+Install dependencies and prepare a disposable local database:
 
 ```bash
 npm install
-npm run judge:setup
+npm run setup:local
 npm run dev
 ```
 
-`judge:setup` creates local configuration, starts PostgreSQL, resets the local `zetra` database,
-inserts a deterministic demo business, and verifies its accounting. Run it only against a
-disposable local database; it never creates a wallet, signs a transaction, deploys a contract, or
-moves funds.
+`setup:local` creates `.env` when it does not exist, starts PostgreSQL, resets the local `zetra`
+database, applies migrations, seeds the deterministic demo workspace, and verifies its accounting.
+It never creates a wallet, signs a transaction, deploys a contract, or moves funds.
 
 Open [http://localhost:3000/login](http://localhost:3000/login) and sign in with:
 
@@ -70,85 +82,108 @@ Email: demo@zetra.local
 Password: Zetra-Demo-2026!
 ```
 
-Then perform these checks:
+The API runs on [http://localhost:4000](http://localhost:4000).
 
-1. Open **Dashboard**. See two reconciled payments, one open invoice, and a books-health summary.
-2. Open **Payments**. See two matched simulated payments and one clearly labelled unidentified
-   `$740.00` receipt that remains outside revenue.
-3. Open invoice `DEMO-001`. Follow its hosted payment link and inspect the NEAR account, USDC amount,
-   and invoice memo shown to the payer.
-4. Open **Books → Reports → Trial balance**. Debits and credits both total `$6,730.00`.
-5. Open **Books → Reports → Receivables aging**. The `$1,550.00` subledger total agrees with the
-   Accounts Receivable control account.
+## Deploy on Render
 
-The demo payments are simulations sent through the same observation, settlement, matching,
-exception, event, webhook and accounting pipeline as configured NEAR receipts. They are visibly
-labelled and are not represented as on-chain transactions.
+The root [`render.yaml`](render.yaml) defines the web app, private API, background worker, and
+PostgreSQL database. Follow [the Render deployment guide](docs/render-deployment.md) to connect the
+repository as a Blueprint, set a recent finalized NEAR testnet start height, and perform a real
+testnet checkout. The configured test USDC token has no real-world value; the Blueprint does not
+enable mainnet or claim that a payment has occurred.
 
-## Verify the repository
+## Verify the implementation
 
-After `npm run judge:setup`:
+After `npm run setup:local`:
 
 ```bash
-# Fast proof of the seeded business and its books
-npm run demo:verify
-
-# Full repository proof: types, unit tests, integration tests, contract tests/WASM and production builds
+# TypeScript, unit tests, integration tests, contract tests, WASM build and production build
 npm run verify
 
+# Deterministic seeded accounting proof
+npm run demo:verify
+
 # Run both
-npm run judge:verify
+npm run verify:all
 ```
 
-The accounting proof fails unless all of these agree:
+The seeded accounting proof checks that:
 
-- three demo invoices: `$2,400.00`, `$2,040.00`, and `$1,550.00`;
-- two settled simulated payments matched exactly once;
-- `$1,550.00` of open receivables tied to the ledger;
-- `$740.00` of unidentified money held as a liability, not revenue;
-- `$5,180.00` closing wallet cash;
-- `$5,990.00` accrual revenue and current earnings;
-- a balanced `$6,730.00` trial balance and balance sheet;
-- cash-flow categories tied to the change in cash;
-- an accountant CSV generated from the same posted ledger.
+- `DEMO-001` and `DEMO-002` are fully reconciled;
+- `DEMO-003` remains an open `$1,550.00` receivable;
+- two simulated payments are matched exactly once;
+- `$740.00` of unidentified money remains a review liability rather than revenue;
+- Accounts Receivable agrees with the receivables subledger;
+- trial-balance debits and credits both equal `$6,730.00`;
+- the balance sheet balances and cash flow reconciles;
+- accountant CSV output is generated from the posted ledger.
 
-## How NEAR fits
+## Accounting model
 
-The hosted payment page prepares a standard NEP-141 `ft_transfer` to the merchant's own NEAR
-account with the memo `zetra:<invoice token>`. The worker reads hydrated finalized blocks from the
-FastNear NEAR Data API, accepts only configured token contracts and monitored receiving accounts,
-and retains block, transaction and outcome evidence. Database uniqueness constraints make a replay
-idempotent.
+For accrual books, issuing an invoice records Accounts Receivable and revenue. A finalized supported
+receipt first debits the business wallet account and credits Payments to Identify. A safe match then
+debits Payments to Identify and credits Accounts Receivable. Unidentified money therefore remains a
+visible liability until reviewed.
 
-Payment collection does not require a custom contract. The Rust contract under
-`contracts/near/books-attestation` is optional: it stores merchant-controlled hashes of exported
-books so an export can later be independently compared with an on-chain attestation.
+Reports aggregate posted journal lines; they do not maintain a second set of totals. Posting rejects
+unbalanced entries, and corrections create reversing entries rather than rewriting posted history.
 
-NEAR Intents is a possible later payment-routing layer for customers paying from other chains or
-tokens. It is deliberately not claimed as part of the current implementation.
+See [the accounting rules](docs/accounting.md) for the complete posting model.
 
-## Repository map
+## Evidence and security
 
-- `frontend/` — Next.js marketing site, console and hosted payment page
-- `backend/src/` — Fastify API
-- `backend/worker/` — finalized-block ingestion and webhook delivery
-- `backend/packages/engine/` — matching, reconciliation and accounting rules
-- `backend/packages/blockchain/` — NEAR data/RPC parsing and transfer verification
-- `backend/packages/database/` — PostgreSQL schema, row-level security and migrations
-- `contracts/near/` — optional native NEAR Rust contract
-- `docs/` — architecture, accounting rules, security and testnet runbook
+- Source observations have a unique chain identity, making replays idempotent.
+- Transaction, block, receipt and NEP-141 event evidence is retained for on-chain payments.
+- Simulated payments explicitly say `Simulation — no on-chain transaction.`
+- PostgreSQL row-level security enforces tenant isolation beneath the API.
+- Financial evidence, allocations, attempts and audit records are protected by append-only database
+  triggers.
+- Runtime signer keys are read from environment variables and are never persisted by Zetra.
+- AI may explain discrepancies or propose actions, but deterministic validation and human
+  authorization remain authoritative.
 
-## Current boundaries
+Read [the security model](docs/security.md) and [architecture](docs/architecture.md) for details.
 
-- The live paths are implemented but cannot be called live until the operator configures Stripe,
-  funds a dedicated NEAR signer and runs the testnet proof.
-- The attestation contract is tested and deployable; no public deployment or external audit is
-  claimed until an operator supplies the account and a third party completes the audit.
-- Anonymous FastNear access is paced and retried; sustained deployments should configure
-  `FASTNEAR_API_KEY`.
-- The application rate limiter is process-local; a multi-instance production deployment needs a
-  shared rate-limit store.
+## NEAR integration
 
-Read [the architecture](docs/architecture.md), [accounting rules](docs/accounting.md),
-[NEAR integration](docs/near.md), [verification guide](docs/verification.md), and
-[testnet runbook](docs/testnet-runbook.md).
+The hosted payment page prepares a standard `ft_transfer` to the merchant's own account with a memo
+of the form `zetra:<invoice token>`. The ingestion worker reads hydrated finalized blocks through the
+FastNear NEAR Data API and filters them against the configured token contracts and monitored
+accounts.
+
+Payment collection does not require a custom contract. The optional Rust contract in
+`contracts/near/books-attestation` stores a merchant-controlled SHA-256 hash for a closed set of
+books so an exported package can later be compared with an on-chain attestation.
+
+For a funded network run, follow [the testnet runbook](docs/testnet-runbook.md). Do not add a
+transaction hash or deployment address to documentation until the transaction or deployment has
+actually occurred.
+
+## Repository structure
+
+```text
+frontend/                         Next.js site, console and hosted checkout
+backend/src/                      Fastify API
+backend/worker/                   NEAR ingestion and background processing
+backend/packages/engine/          Reconciliation and accounting rules
+backend/packages/blockchain/      NEAR data parsing, RPC and transfer helpers
+backend/packages/database/        PostgreSQL migrations and row-level security
+contracts/near/books-attestation/ Optional native NEAR Rust contract
+scripts/                          Local setup, verification and operational utilities
+docs/                             Architecture, accounting, security and runbooks
+```
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Accounting rules](docs/accounting.md)
+- [NEAR integration](docs/near.md)
+- [Payment-source adapters](docs/payment-sources.md)
+- [Verification](docs/verification.md)
+- [Testnet runbook](docs/testnet-runbook.md)
+- [Attestation deployment](docs/attestation-deployment.md)
+- [Render deployment](docs/render-deployment.md)
+
+## License
+
+See [LICENSE](LICENSE).

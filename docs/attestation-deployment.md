@@ -3,8 +3,14 @@
 Zetra includes a small Rust contract that publishes a merchant's monthly books root. The
 application can prepare and verify a root locally; the contract is optional to payment processing.
 
-The repository contains deployment automation, but it deliberately does not contain a key and does
-not claim that a public deployment or independent audit has happened.
+The repository contains deployment automation, but it deliberately does not contain a key.
+
+## Current testnet deployment
+
+- Contract account: `zetra-books-electron.testnet`
+- Deployment transaction: [`FVxHsUkb8VJuGDC6xn82cXCw4MDCVbWzuEi3WHCREwwS`](https://explorer.testnet.near.org/transactions/FVxHsUkb8VJuGDC6xn82cXCw4MDCVbWzuEi3WHCREwwS)
+- The testnet RPC confirms contract code is installed. No books attestation has yet been published.
+- The contract has not been externally audited.
 
 ## Testnet deployment
 

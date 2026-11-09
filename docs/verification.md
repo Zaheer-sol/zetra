@@ -7,11 +7,11 @@ a network deployment.
 
 ```bash
 npm install
-npm run judge:setup
+npm run setup:local
 npm run dev
 ```
 
-`judge:setup` starts PostgreSQL, resets only the local `zetra` development database, applies every
+`setup:local` starts PostgreSQL, resets only the local `zetra` development database, applies every
 migration, seeds the deterministic demo, and runs the accounting proof. An existing `.env` is never
 overwritten.
 
@@ -46,7 +46,7 @@ It runs, in order:
 5. The contract WASM release build.
 6. API, worker and web production builds.
 
-Use `npm run judge:verify` to run both the repository proof and seeded accounting proof.
+Use `npm run verify:all` to run both the repository proof and seeded accounting proof.
 
 ## Manual browser walkthrough
 

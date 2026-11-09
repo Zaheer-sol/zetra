@@ -51,6 +51,7 @@ describe("reconciliation stress scenarios", () => {
     expect(paymentEvidence.data.nodes.find((node: any) => node.type === "transaction").explanation).toContain("no on-chain transaction");
     const invoiceEvidence = await call("GET", `/v1/invoices/${exactInvoice.id}/evidence`, auth);
     expect(invoiceEvidence.statusCode).toBe(200);
+    expect(invoiceEvidence.data.simulated).toBe(true);
     expect(invoiceEvidence.data.payments[0].subject.id).toBe(exact.payment_id);
 
     const partialInvoice = await invoice("10.00");

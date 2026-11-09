@@ -7,7 +7,7 @@ const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
   PUBLIC_APP_URL: z.string().url().optional(),
-  API_PORT: z.coerce.number().int().positive().default(4000),
+  API_PORT: z.coerce.number().int().positive().default(Number(process.env.PORT) || 4000),
   /** Address the API listens on. */
   API_HOST: z.string().default("0.0.0.0"),
   DATABASE_URL: z.string().min(1).optional(),
@@ -15,6 +15,8 @@ const schema = z.object({
   DB_POOL_SIZE: z.coerce.number().int().positive().default(10),
   SESSION_SECRET: z.string().optional(),
   ENCRYPTION_KEY: z.string().optional(),
+  /** Password for the restricted PostgreSQL runtime role; migrations still use MIGRATION_DATABASE_URL. */
+  APP_DB_PASSWORD: z.string().optional(),
   /** Which proxy hops may set X-Forwarded-For (proxy-addr syntax). Default: only private/loopback peers, e.g. the web proxy. */
   TRUST_PROXY: z.string().default("loopback,linklocal,uniquelocal"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
@@ -68,6 +70,7 @@ export function appEnv(source: Record<string, string | undefined> = process.env)
     if (!sessionSecret || sessionSecret === DEV_SESSION_SECRET || sessionSecret.length < 32) throw new Error("SESSION_SECRET must be set to at least 32 random characters in production");
     if (!encryptionKey || encryptionKey === DEV_ENCRYPTION_KEY) throw new Error("ENCRYPTION_KEY must be 32 random bytes in production: 64 hexadecimal characters or base64");
     if (!parsed.DATABASE_URL) throw new Error("DATABASE_URL is required in production");
+    if (!parsed.APP_DB_PASSWORD) throw new Error("APP_DB_PASSWORD is required in production so the app can use the restricted zetra_app database role");
   }
   const env: AppEnv = {
     ...parsed,

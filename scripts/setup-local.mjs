@@ -21,7 +21,7 @@ async function finalTestnetHeight(rpcUrl) {
   const response = await fetch(rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: "zetra-judge-setup", method: "block", params: { finality: "final" } }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: "zetra-local-setup", method: "block", params: { finality: "final" } }),
     signal: AbortSignal.timeout(15_000)
   });
   if (!response.ok) throw new Error(`NEAR testnet RPC returned HTTP ${response.status}`);
@@ -60,12 +60,12 @@ try {
   run("npm", ["run", "db:reset"]);
   run("npm", ["run", "demo:seed"]);
   run("npm", ["run", "demo:verify"]);
-  console.log("\nJudge setup complete.");
+  console.log("\nLocal setup complete.");
   console.log("Run: npm run dev");
   console.log("Open: http://localhost:3000/login");
   console.log("Email: demo@zetra.local");
   console.log("Password: Zetra-Demo-2026!");
 } catch (error) {
-  console.error(`\nJudge setup failed: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`\nLocal setup failed: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 }

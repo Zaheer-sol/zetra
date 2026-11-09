@@ -64,5 +64,5 @@ the encrypted `webhook_secret` when creating a Stripe payment source), then poin
 receipt, clearing/application journal entries and idempotent retry.
 
 After the run, execute `npm run demo:verify` for the deterministic demo and the full automated suite
-with `npm run verify`. Add the new public transaction evidence to the hackathon demo only after
+with `npm run verify`. Add the new public transaction evidence to the documentation only after
 manually reviewing it. Do not commit wallet credentials or hosted secrets.

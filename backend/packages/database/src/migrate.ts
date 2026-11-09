@@ -7,20 +7,25 @@ if (!url) {
   console.error("Set MIGRATION_DATABASE_URL (schema owner) or DATABASE_URL.");
   process.exit(1);
 }
-await migrate(url);
 
-// Managed Postgres hands out one superuser, and a superuser bypasses row-level security. When
-// APP_DB_PASSWORD is set, enable the restricted zetra_app role (created by the migrations) with that
-// password, so the application can connect as it instead.
+// Provision the restricted runtime role before applying migrations so each migration can grant it
+// only the permissions it needs. Render Postgres provides an administrative connection string;
+// application processes derive a zetra_app URL from that host using this same password.
 if (process.env.APP_DB_PASSWORD) {
   const { default: pg } = await import("pg");
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {
-    const sql = (await client.query<{ sql: string }>("SELECT format('ALTER ROLE zetra_app WITH LOGIN PASSWORD %L', $1::text) AS sql", [process.env.APP_DB_PASSWORD])).rows[0]!.sql;
+    const role = await client.query<{ exists: boolean }>("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='zetra_app') AS exists");
+    const statement = role.rows[0]?.exists
+      ? "ALTER ROLE zetra_app WITH LOGIN PASSWORD %L"
+      : "CREATE ROLE zetra_app LOGIN PASSWORD %L";
+    const sql = (await client.query<{ sql: string }>("SELECT format($1::text, $2::text) AS sql", [statement, process.env.APP_DB_PASSWORD])).rows[0]!.sql;
     await client.query(sql);
-    console.log("application role enabled");
+    console.log("restricted application role provisioned");
   } finally {
     await client.end();
   }
 }
+
+await migrate(url);

@@ -1,4 +1,4 @@
-# Test-mode judge walkthrough
+# Test-mode product walkthrough
 
 This walkthrough uses clearly labelled simulated payments. It does not require a funded wallet,
 create an on-chain transaction, or publish a contract.
@@ -9,7 +9,7 @@ From the repository root:
 
 ```bash
 npm install
-npm run judge:setup
+npm run setup:local
 npm run dev
 ```
 

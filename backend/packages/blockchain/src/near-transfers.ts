@@ -1,4 +1,4 @@
-import { connect, keyStores, KeyPair } from "near-api-js";
+import { connect, keyStores, KeyPair, transactions } from "near-api-js";
 import { loadNearNetworks, type NearNetworkId } from "@zetra/config";
 
 const YOCTO_PER_NEAR = 10n ** 24n;
@@ -64,12 +64,17 @@ export async function sendFt(input: NearTransferInput): Promise<NearTransferResu
     deps: { keyStore: store }
   });
   const account = await near.account(input.signerId);
-  const outcome = await account.functionCall({
-    contractId: input.tokenContract,
-    methodName: "ft_transfer",
-    args: { receiver_id: input.receiverId, amount: input.amount.toString(), ...(input.memo ? { memo: input.memo } : {}) },
-    gas: FT_GAS,
-    attachedDeposit: ONE_YOCTO
+  // The legacy Account#functionCall helper uses EXECUTED_OPTIMISTIC. Outbound money must not be
+  // marked confirmed until the transfer receipt is final, so use the explicit transaction API.
+  const outcome = await account.signAndSendTransaction({
+    receiverId: input.tokenContract,
+    actions: [transactions.functionCall(
+      "ft_transfer",
+      { receiver_id: input.receiverId, amount: input.amount.toString(), ...(input.memo ? { memo: input.memo } : {}) },
+      FT_GAS,
+      ONE_YOCTO
+    )],
+    waitUntil: "FINAL"
   });
   const tx = (outcome as unknown as Record<string, any>).transaction ?? {};
   const txOutcome = (outcome as unknown as Record<string, any>).transaction_outcome?.outcome ?? {};

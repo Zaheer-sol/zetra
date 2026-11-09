@@ -28,7 +28,7 @@ describe("parseEncryptionKey", () => {
   });
 
   it("lets production start with a base64 key and refuses a missing one", () => {
-    const base = { NODE_ENV: "production", SESSION_SECRET: randomBytes(32).toString("base64"), DATABASE_URL: "postgresql://localhost/x" };
+    const base = { NODE_ENV: "production", SESSION_SECRET: randomBytes(32).toString("base64"), DATABASE_URL: "postgresql://localhost/x", APP_DB_PASSWORD: randomBytes(32).toString("base64") };
     expect(appEnv({ ...base, ENCRYPTION_KEY: key.toString("base64") }).encryptionKey).toBe(key.toString("hex"));
     expect(() => appEnv(base)).toThrow(/ENCRYPTION_KEY/);
   });

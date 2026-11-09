@@ -1,4 +1,4 @@
-import { connect, keyStores, KeyPair } from "near-api-js";
+import { connect, keyStores, KeyPair, transactions } from "near-api-js";
 import { loadNearNetworks, type NearNetworkId } from "@zetra/config";
 
 export interface NearAttestationInput {
@@ -32,12 +32,17 @@ export async function attestBooks(input: NearAttestationInput): Promise<NearAtte
   await store.setKey(networkId, input.signerId, KeyPair.fromString(input.privateKey as never));
   const near = await connect({ networkId, nodeUrl: network.rpcUrl, deps: { keyStore: store } });
   const account = await near.account(input.signerId);
-  const outcome = await account.functionCall({
-    contractId: input.contractId,
-    methodName: "attest",
-    args: { book_id: input.bookId, period: input.period, root: input.root, entry_count: input.entryCount },
-    gas: 100n * 10n ** 12n,
-    attachedDeposit: ATTESTATION_STORAGE_DEPOSIT
+  // The legacy Account#functionCall helper uses EXECUTED_OPTIMISTIC. A books attestation is only
+  // publishable after the contract receipt is final, so use the explicit FINAL transaction API.
+  const outcome = await account.signAndSendTransaction({
+    receiverId: input.contractId,
+    actions: [transactions.functionCall(
+      "attest",
+      { book_id: input.bookId, period: input.period, root: input.root, entry_count: input.entryCount },
+      100n * 10n ** 12n,
+      ATTESTATION_STORAGE_DEPOSIT
+    )],
+    waitUntil: "FINAL"
   });
   const raw = outcome as unknown as Record<string, any>;
   const tx = raw.transaction ?? {};
