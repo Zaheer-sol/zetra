@@ -9,8 +9,8 @@ if (!url) {
 }
 
 // Provision the restricted runtime role before applying migrations so each migration can grant it
-// only the permissions it needs. Render Postgres provides an administrative connection string;
-// application processes derive a zetra_app URL from that host using this same password.
+// only the permissions it needs. The migration URL must use the database owner; application
+// processes derive a zetra_app URL from that host using this same password.
 if (process.env.APP_DB_PASSWORD) {
   const { default: pg } = await import("pg");
   const client = new pg.Client({ connectionString: url });

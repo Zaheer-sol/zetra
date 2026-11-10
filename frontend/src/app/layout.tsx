@@ -16,10 +16,20 @@ const mono = localFont({
   display: "swap"
 });
 
+const publicSiteUrl = process.env.NEXT_PUBLIC_APP_URL;
+
 export const metadata: Metadata = {
+  ...(publicSiteUrl ? { metadataBase: new URL(publicSiteUrl) } : {}),
   title: { default: "Zetra · Get paid in stablecoins. Your books are already done.", template: "%s · Zetra" },
   description: "Invoices, payment records and bookkeeping tools for businesses working with USDC.",
   applicationName: "Zetra",
+  openGraph: {
+    type: "website",
+    ...(publicSiteUrl ? { url: publicSiteUrl } : {}),
+    siteName: "Zetra",
+    title: "Zetra · Get paid in stablecoins. Your books are already done.",
+    description: "Invoices, payment records and bookkeeping tools for businesses working with USDC."
+  },
   icons: { icon: "/favicon.svg" }
 };
 

@@ -1,0 +1,30 @@
+FROM node:22-bookworm-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/
+COPY backend/worker/package.json backend/worker/
+COPY frontend/package.json frontend/
+COPY backend/packages/blockchain/package.json backend/packages/blockchain/
+COPY backend/packages/config/package.json backend/packages/config/
+COPY backend/packages/database/package.json backend/packages/database/
+COPY backend/packages/engine/package.json backend/packages/engine/
+COPY backend/packages/events/package.json backend/packages/events/
+COPY backend/packages/matching/package.json backend/packages/matching/
+COPY backend/packages/schemas/package.json backend/packages/schemas/
+COPY backend/packages/sdk/package.json backend/packages/sdk/
+COPY backend/packages/security/package.json backend/packages/security/
+RUN npm ci --ignore-scripts
+
+FROM deps AS build
+COPY . .
+RUN node scripts/build-service.mjs backend/worker/src/main.ts backend/worker/dist/main.js
+
+FROM node:22-bookworm-slim AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+RUN useradd --system --uid 1001 zetra
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json ./
+COPY --from=build /app/backend/worker/dist ./dist
+USER zetra
+CMD ["node", "dist/main.js"]

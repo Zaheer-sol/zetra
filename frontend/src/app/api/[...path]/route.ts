@@ -14,8 +14,8 @@ export const runtime = "nodejs";
 const HOP_BY_HOP = new Set(["host", "connection", "content-length", "transfer-encoding", "keep-alive", "upgrade", "proxy-connection", "te", "trailer"]);
 
 /**
- * API_INTERNAL_URL is normally a full URL. A bare host is also accepted; internal Render
- * service references set API_INTERNAL_PROTOCOL=http because private traffic stays on Render's network.
+ * API_INTERNAL_URL is normally a full URL. A bare host is also accepted; private service references
+ * can set API_INTERNAL_PROTOCOL=http because private traffic stays on the platform network.
  */
 function apiBase(value = process.env.API_INTERNAL_URL): string {
   const v = (value ?? "").trim().replace(/\/$/, "");

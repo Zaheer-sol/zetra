@@ -75,7 +75,7 @@ npm run dev
 database, applies migrations, seeds the deterministic demo workspace, and verifies its accounting.
 It never creates a wallet, signs a transaction, deploys a contract, or moves funds.
 
-Open [http://localhost:3000/login](http://localhost:3000/login) and sign in with:
+Open [http://localhost:3000/login](http://localhost:3000/login) and sign in with the **local demo account**:
 
 ```text
 Email: demo@zetra.local
@@ -84,13 +84,13 @@ Password: Zetra-Demo-2026!
 
 The API runs on [http://localhost:4000](http://localhost:4000).
 
-## Deploy on Render
+## Deploy on Railway
 
-The root [`render.yaml`](render.yaml) defines the web app, private API, background worker, and
-PostgreSQL database. Follow [the Render deployment guide](docs/render-deployment.md) to connect the
-repository as a Blueprint, set a recent finalized NEAR testnet start height, and perform a real
-testnet checkout. The configured test USDC token has no real-world value; the Blueprint does not
-enable mainnet or claim that a payment has occurred.
+Zetra runs as separate web, API, worker, and PostgreSQL services. See the
+[Railway deployment guide](docs/railway-deployment.md) for service Dockerfiles, commands, required
+variables, and private networking. The local demo credentials above are not production credentials.
+The configured `usdc.fakes.testnet` token has no real-world value; a deployed URL alone does not
+confirm a testnet payment has been submitted or reconciled.
 
 ## Verify the implementation
 
@@ -182,7 +182,7 @@ docs/                             Architecture, accounting, security and runbook
 - [Verification](docs/verification.md)
 - [Testnet runbook](docs/testnet-runbook.md)
 - [Attestation deployment](docs/attestation-deployment.md)
-- [Render deployment](docs/render-deployment.md)
+- [Railway deployment](docs/railway-deployment.md)
 
 ## License
 
