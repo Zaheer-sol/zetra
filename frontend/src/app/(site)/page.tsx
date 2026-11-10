@@ -320,9 +320,6 @@ x-zetra-signature: v1=6f1c…a09e
                     Create your workspace <ArrowRight aria-hidden="true" />
                   </Link>
                 </Button>
-                <Button asChild size="lg" variant="secondary">
-                  <Link href="/pricing">View pricing</Link>
-                </Button>
               </div>
             </div>
           </Reveal>

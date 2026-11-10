@@ -13,12 +13,11 @@ const LINKS = [
   { href: "/product", label: "Product" },
   { href: "/developers", label: "Developers" },
   { href: "/security", label: "Security" },
-  { href: "/pricing", label: "Pricing" },
   { href: "/docs", label: "Docs" }
 ];
 
 const FOOTER = [
-  { title: "Product", links: [["/product", "How it works"], ["/pricing", "Pricing"], ["/security", "Security"]] },
+  { title: "Product", links: [["/product", "How it works"], ["/security", "Security"]] },
   { title: "Developers", links: [["/docs", "Documentation"], ["/docs/quickstart", "Quickstart"], ["/docs/webhooks", "Webhooks"], ["/docs/near-payments", "NEAR payments"]] },
   { title: "Company", links: [["/login", "Sign in"], ["/signup", "Create account"], ["mailto:hello@zetra.dev", "Contact"]] }
 ] as const;

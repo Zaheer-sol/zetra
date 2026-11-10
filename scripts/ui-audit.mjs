@@ -8,7 +8,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 const BASE = process.env.AUDIT_BASE ?? "http://localhost:3000";
 const OUT = process.env.AUDIT_OUT ?? "test-results/ui-audit";
 const defaultRoutes = [
-  "/", "/product", "/developers", "/security", "/pricing", "/docs", "/login", "/signup",
+  "/", "/product", "/developers", "/security", "/docs", "/login", "/signup",
   "/forgot-password", "/reset-password"
 ];
 const routes = process.argv.slice(2).length
