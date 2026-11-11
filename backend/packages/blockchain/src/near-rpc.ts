@@ -136,6 +136,39 @@ export class NearRpcClient {
     return this.parseBlock(result);
   }
 
+  /** Read a contract view method at finality and decode its JSON return value. */
+  async viewFunction<T = unknown>(contractId: string, methodName: string, args: Record<string, unknown>): Promise<T> {
+    if (!contractId || !methodName) throw new Error("NEAR view contract and method are required");
+    const argsBase64 = Buffer.from(JSON.stringify(args), "utf8").toString("base64");
+    const result: unknown = await this.request("query", {
+      request_type: "call_function",
+      finality: "final",
+      account_id: contractId,
+      method_name: methodName,
+      args_base64: argsBase64
+    });
+    if (!isRecord(result) || !Array.isArray(result.result) || !result.result.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)) {
+      throw new NearRpcError(`NEAR RPC returned an invalid ${methodName} result`, false);
+    }
+    try {
+      return JSON.parse(new TextDecoder().decode(Uint8Array.from(result.result))) as T;
+    } catch (error) {
+      throw new NearRpcError(`NEAR ${methodName} returned invalid JSON`, false, undefined, undefined, { cause: error });
+    }
+  }
+
+  /** Return a finalized account balance, or null when the account does not exist. */
+  async getAccountBalance(accountId: string): Promise<bigint | null> {
+    try {
+      const result: unknown = await this.request("query", { request_type: "view_account", finality: "final", account_id: accountId });
+      if (!isRecord(result)) throw new NearRpcError("NEAR RPC returned an invalid account view", false);
+      return parseInteger(result.amount, "account balance");
+    } catch (error) {
+      if (error instanceof NearRpcError && error.code === -32000 && /does not exist|unknown account/i.test(error.message)) return null;
+      throw error;
+    }
+  }
+
   async getFinalBlockByHeight(height: bigint): Promise<NearBlockReference> {
     if (height < 0n) throw new Error("NEAR block height must be non-negative");
     if (height > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("NEAR block height is outside the JSON safe-integer range");

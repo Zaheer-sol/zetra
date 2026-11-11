@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { paymentNetworkById } from "@zetra/config";
+import { loadNearNetworks, paymentNetworkById } from "@zetra/config";
 import { withGlobal, withSystem, withTenant, type Client } from "@zetra/database";
 import { amount, explorerTx, serializeLineItems, simulatePayment, SYSTEM } from "@zetra/engine";
+import { NearRpcClient } from "@zetra/blockchain";
 import { ApiError } from "../lib/errors";
 import { parse } from "../lib/route";
 
@@ -26,6 +27,67 @@ export function publicRoutes(app: FastifyInstance) {
     const { token } = parse(tokenParam, request.params, "path");
     const hit = await locate(token);
     return withTenant(hit.organization_id, (c) => publicView(c, hit.id));
+  });
+
+  app.post("/v1/public/payment-requests/:token/preflight", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } }, schema: { tags: ["public"], summary: "Check NEAR testnet payer and token readiness before opening a wallet" } }, async (request) => {
+    const { token } = parse(tokenParam, request.params, "path");
+    const { payer_account_id } = parse(z.object({ payer_account_id: z.string().min(2).max(64).regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/) }), request.body, "body");
+    const hit = await locate(token);
+    return withTenant(hit.organization_id, async (c) => {
+      const inv = (await c.query("SELECT i.environment, i.network_id, i.asset_id, i.wallet_id, i.amount_due, i.amount_paid, i.amount_written_off, i.status, w.address AS recipient FROM invoices i JOIN wallets w ON w.id = i.wallet_id WHERE i.id = $1", [hit.id])).rows[0] as Row;
+      const network = paymentNetworkById(inv.network_id);
+      const asset = network?.assets.find((candidate) => candidate.id === inv.asset_id);
+      if (!network?.enabled || !asset || network.family !== "near") throw new ApiError(503, "network_unavailable", "This invoice's NEAR network or token is not enabled on this deployment.");
+      if (inv.status !== "open" && inv.status !== "partially_paid") throw new ApiError(409, "payment_not_available", "This invoice is no longer accepting payments.");
+      const recipient = String(inv.recipient).toLowerCase();
+      const payer = payer_account_id.toLowerCase();
+      const rpcNetwork = loadNearNetworks().find((candidate) => candidate.id === network.id);
+      if (!rpcNetwork) throw new ApiError(503, "network_unavailable", "The configured NEAR network is unavailable.");
+      const rpc = new NearRpcClient(rpcNetwork);
+      let bounds: { min: string; max: string };
+      let payerStorage: { total: string; available: string } | null;
+      let recipientStorage: { total: string; available: string } | null;
+      let tokenBalance: string;
+      let nearBalance: bigint | null;
+      try {
+        [bounds, payerStorage, recipientStorage, tokenBalance, nearBalance] = await Promise.all([
+          rpc.viewFunction<{ min: string; max: string }>(asset.contractId, "storage_balance_bounds", {}),
+          rpc.viewFunction<{ total: string; available: string } | null>(asset.contractId, "storage_balance_of", { account_id: payer }),
+          rpc.viewFunction<{ total: string; available: string } | null>(asset.contractId, "storage_balance_of", { account_id: recipient }),
+          rpc.viewFunction<string>(asset.contractId, "ft_balance_of", { account_id: payer }),
+          rpc.getAccountBalance(payer)
+        ]);
+      } catch {
+        throw new ApiError(503, "token_preflight_unavailable", "Could not read the configured NEAR token and wallet right now. Check the testnet token contract and retry shortly.");
+      }
+      if (!bounds || !/^\d+$/.test(bounds.min) || !/^\d+$/.test(bounds.max)) throw new ApiError(503, "token_contract_unavailable", "The configured token contract did not return valid storage requirements.");
+      const amountRemaining = BigInt(inv.amount_due) - BigInt(inv.amount_paid) - BigInt(inv.amount_written_off);
+      const amountRequired = amountRemaining > 0n ? amountRemaining : 0n;
+      const registrationAccounts = new Set<string>();
+      if (!payerStorage) registrationAccounts.add(payer);
+      if (!recipientStorage) registrationAccounts.add(recipient);
+      const registrationDeposit = BigInt(bounds.min) * BigInt(registrationAccounts.size);
+      // Keep a conservative gas reserve for wallet registration plus the transfer.
+      const gasReserve = 10n ** 22n;
+      const nearRequired = registrationDeposit + gasReserve;
+      return {
+        network: network.id,
+        token_contract: asset.contractId,
+        payer_account_id: payer,
+        recipient_account_id: recipient,
+        payer_exists: nearBalance !== null,
+        payer_near_balance_yocto: nearBalance?.toString() ?? null,
+        payer_token_registered: payerStorage !== null,
+        recipient_token_registered: recipientStorage !== null,
+        token_storage_minimum_yocto: bounds.min,
+        payer_token_balance_base_units: tokenBalance,
+        amount_required_base_units: amountRequired.toString(),
+        registration_deposit_required_yocto: registrationDeposit.toString(),
+        gas_reserve_yocto: gasReserve.toString(),
+        can_pay: nearBalance !== null && BigInt(nearBalance) >= nearRequired && BigInt(tokenBalance) >= amountRequired,
+        environment: inv.environment
+      };
+    });
   });
 
   app.post("/v1/public/payment-requests/:token/simulate", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } }, schema: { tags: ["public"], summary: "Test mode only: simulate paying this request" } }, async (request) => {
