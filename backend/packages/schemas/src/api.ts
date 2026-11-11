@@ -80,7 +80,8 @@ export const createWalletInput = z.object({
 });
 export const updateWalletInput = z.object({
   name: z.string().trim().min(1).max(80).optional(),
-  monitoring_enabled: z.boolean().optional()
+  monitoring_enabled: z.boolean().optional(),
+  is_default: z.boolean().optional()
 });
 
 // ---- customers --------------------------------------------------------------------------------

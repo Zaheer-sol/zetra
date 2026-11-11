@@ -97,6 +97,13 @@ export default function NearWalletCheckout({ pay, onSubmitted }: { pay: NearPay;
 
   return (
     <div className="mt-4 grid gap-3">
+      <div className="rounded-xl border bg-muted/40 px-3 py-2.5 text-sm">
+        <div className="text-xs text-muted-foreground">Business receives at</div>
+        <div className="mt-1 break-all font-mono text-xs font-medium">{pay.recipient}</div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          The wallet may show the USDC token contract as the transaction destination. The transfer recipient is the business address above.
+        </p>
+      </div>
       {accountId ? (
         <>
           <div className="rounded-xl bg-muted px-3 py-2.5 text-sm">

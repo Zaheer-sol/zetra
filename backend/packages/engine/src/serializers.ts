@@ -99,6 +99,7 @@ export function serializeWallet(row: Row, extra: { assets?: string[]; stats?: Ro
     ...networkInfo(row.network_id),
     assets: (extra.assets ?? []).map((id) => assetInfo(id, row.network_id)).filter(Boolean),
     monitoring_enabled: row.monitoring_enabled,
+    is_default: Boolean(row.is_default),
     monitor_from_block: row.monitor_from_block ?? null,
     ...(extra.stats
       ? { stats: { payments: Number(extra.stats.payments ?? 0), total_received: decimalString(extra.stats.total_received), last_payment_at: iso(extra.stats.last_payment_at) } }

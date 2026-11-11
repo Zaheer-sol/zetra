@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { Plus, Wallet } from "lucide-react";
+import { Check, Plus, Wallet } from "lucide-react";
 import { SyncBadge } from "@/components/payment-tables";
 import { useSession } from "@/components/session";
 import { Alert, Button, Card, Chain, EmptyState, ErrorState, Field, fieldErrors, Input, Modal, Money, PageHeader, Select, SkeletonRows, useToast } from "@/components/app-ui";
@@ -15,18 +15,33 @@ function WalletsView() {
   const router = useRouter();
   const params = useSearchParams();
   const { can } = useSession();
+  const toast = useToast();
+  const [settingDefault, setSettingDefault] = useState<string | null>(null);
   const [adding, setAdding] = useState(params.get("add") === "1");
   const { data, error, mutate } = useApi<{ data: any[] }>("/v1/wallets", { refreshInterval: 5000 });
+
+  const setDefault = async (wallet: any) => {
+    setSettingDefault(wallet.id);
+    try {
+      await api(`/v1/wallets/${wallet.id}`, { method: "PATCH", body: { is_default: true } });
+      await mutate();
+      toast("success", `${wallet.name} is now the default for new invoices.`);
+    } catch (e) {
+      toast("error", (e as Error).message);
+    } finally {
+      setSettingDefault(null);
+    }
+  };
 
   return (
     <div className="grid gap-6 [&>*]:min-w-0">
       <PageHeader
         title="Receiving wallets"
-        description="Public wallet addresses Zetra monitors for incoming supported stablecoins. Funds and signing authority remain under your control."
+        description="Choose the business wallet where customers should send supported stablecoins. Zetra monitors it, while funds and signing authority remain under your control."
         actions={can("wallets:write") && <Button variant="primary" icon={<Plus />} onClick={() => setAdding(true)}>Add wallet</Button>}
       />
       <Alert tone="neutral" title="Zetra only needs the public address">
-        Keep seed phrases, private keys and signing credentials in your wallet. They never belong in Zetra.
+        Keep seed phrases, private keys and signing credentials in your wallet. They never belong in Zetra. Set a default receiving wallet to preselect it on new invoices; you can still choose another wallet per invoice.
       </Alert>
       <Card>
         {error ? (
@@ -45,6 +60,7 @@ function WalletsView() {
                 <TableHead className="max-md:hidden">Network</TableHead>
                 <TableHead className="max-md:hidden">Assets</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Invoice default</TableHead>
                 <TableHead className="text-right max-md:hidden">Payments</TableHead>
                 <TableHead className="text-right">Received</TableHead>
               </TableRow>
@@ -62,6 +78,13 @@ function WalletsView() {
                   <TableCell className="max-md:hidden">{w.assets.map((a: any) => a.symbol).join(", ")}</TableCell>
                   <TableCell>
                     <SyncBadge sync={w.sync} />
+                  </TableCell>
+                  <TableCell onClick={(event) => event.stopPropagation()}>
+                    {w.is_default ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success"><Check className="size-3.5" /> Default</span>
+                    ) : can("wallets:write") ? (
+                      <Button size="sm" variant="ghost" loading={settingDefault === w.id} disabled={!!settingDefault || !w.monitoring_enabled} onClick={() => setDefault(w)}>Set as default</Button>
+                    ) : <span className="text-xs text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell className="tabular text-right max-md:hidden">{w.stats.payments}</TableCell>
                   <TableCell className="text-right font-semibold">
@@ -134,7 +157,7 @@ function AddWalletModal({ open, onClose, onCreated }: { open: boolean; onClose: 
           }} options={(networkOptions?.data ?? []).map((network) => ({ value: network.key, label: network.name }))} />
         </Field>
         <Field label="Public address" htmlFor="w-address" error={errs.address ?? (form.address && !valid ? selectedNetwork?.family === "near" ? "Enter a valid NEAR account ID." : "Enter a 0x address with 40 hex characters." : null)} hint="Paste the address only. Never share a private key or seed phrase.">
-          <Input id="w-address" className="font-mono" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="account.near" autoFocus spellCheck={false} autoComplete="off" />
+          <Input id="w-address" className="font-mono" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder={form.network === "near:testnet" ? "account.testnet" : "account.near"} autoFocus spellCheck={false} autoComplete="off" />
         </Field>
         <fieldset className="grid gap-2">
           <legend className="mb-1.5 text-sm font-medium text-foreground/80">Accepted assets</legend>

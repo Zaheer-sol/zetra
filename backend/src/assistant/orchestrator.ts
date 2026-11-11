@@ -490,8 +490,13 @@ async function createFlow(ctx: AssistantContext, input: Draft): Promise<Reply> {
   if (!draft.amount) return ask(ctx, draft, "amount", `Sure. How much should I bill ${draft.customerName ?? draft.newCustomer}?`);
   if (!draft.purpose) return ask(ctx, draft, "purpose", "What's it for? Your customer sees this before they pay.");
 
-  // Asset and network: use configured NEAR wallets and one of their accepted assets.
-  const wallets = (await api<{ data: Any[] }>(ctx, "GET", "/v1/wallets")).data.filter((w) => String(w.network ?? "").startsWith("near:"));
+  // Asset and network: use active NEAR wallets for the current environment and
+  // one of their accepted assets. `network` is the family ("near"); the full
+  // network ID ("near:testnet" / "near:mainnet") is exposed as `network_id`.
+  const requestedNetwork = ctx.environment === "test" ? "near:testnet" : "near:mainnet";
+  const wallets = (await api<{ data: Any[] }>(ctx, "GET", "/v1/wallets")).data.filter(
+    (w) => (w.network_id ?? w.network) === requestedNetwork && w.monitoring_enabled !== false
+  );
   const accepted = [...new Set(wallets.flatMap((w) => (w.assets ?? []).map((a: Any) => a.symbol as string)))];
   const network = wallets[0]?.network_name ?? "NEAR";
   if (!accepted.length) {
@@ -517,7 +522,7 @@ async function createFlow(ctx: AssistantContext, input: Draft): Promise<Reply> {
     title: draft.purpose,
     amount: draft.amount,
     asset: draft.asset,
-    network: "near:mainnet",
+    network: requestedNetwork,
     network_name: network,
     due_at: draft.dueAt ?? null
   });

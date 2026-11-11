@@ -30,8 +30,8 @@ export async function createInvoice(client: Client, organizationId: string, envi
   const wallet = (
     await client.query(
       `SELECT w.* FROM wallets w JOIN wallet_assets wa ON wa.wallet_id = w.id AND wa.asset_id = $4
-        WHERE w.organization_id = $1 AND w.environment = $2 AND w.network_id = $3 AND w.archived_at IS NULL ${input.wallet_id ? "AND w.id = $5" : ""}
-        ORDER BY w.created_at LIMIT 1`,
+        WHERE w.organization_id = $1 AND w.environment = $2 AND w.network_id = $3 AND w.archived_at IS NULL AND w.monitoring_enabled = true ${input.wallet_id ? "AND w.id = $5" : ""}
+        ORDER BY w.is_default DESC, w.created_at LIMIT 1`,
       input.wallet_id ? [organizationId, environment, network.id, asset.id, input.wallet_id] : [organizationId, environment, network.id, asset.id]
     )
   ).rows[0] as Row | undefined;

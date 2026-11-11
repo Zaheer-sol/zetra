@@ -24,6 +24,8 @@ interface WalletOpt {
   network_id: string;
   network_name: string;
   assets: Array<{ symbol: string }>;
+  is_default?: boolean;
+  monitoring_enabled?: boolean;
 }
 
 function NewInvoiceForm() {
@@ -52,9 +54,12 @@ function NewInvoiceForm() {
   const errs = fieldErrors(error);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const eligible = useMemo(() => (wallets?.data ?? []).filter((w) => (w.network_id.startsWith("near:") ? w.network_id : w.network) === form.network && w.assets.some((a) => a.symbol === form.asset)), [wallets, form.network, form.asset]);
+  const eligible = useMemo(() => (wallets?.data ?? []).filter((w) => w.monitoring_enabled !== false && (w.network_id.startsWith("near:") ? w.network_id : w.network) === form.network && w.assets.some((a) => a.symbol === form.asset)), [wallets, form.network, form.asset]);
   useEffect(() => {
-    if (!form.wallet_id && eligible[0]) setForm((f) => ({ ...f, wallet_id: eligible[0]!.id }));
+    if (!form.wallet_id && eligible[0]) {
+      const preferred = eligible.find((wallet) => wallet.is_default) ?? eligible[0]!;
+      setForm((f) => ({ ...f, wallet_id: preferred.id }));
+    }
   }, [eligible, form.wallet_id]);
   const networks = useMemo(() => [...new Map((wallets?.data ?? []).map((w) => [w.network_id.startsWith("near:") ? w.network_id : w.network, w.network_name])).entries()], [wallets]);
   useEffect(() => {
@@ -224,7 +229,7 @@ function NewInvoiceForm() {
               }))} />
             ) : (
               <Alert tone="warning">
-                No wallet accepts {form.asset} on this network. <TextLink href="/app/wallets?add=1">Add one</TextLink>.
+                No active wallet accepts {form.asset} on this network. <TextLink href="/app/wallets?add=1">Add or resume one</TextLink>.
               </Alert>
             )}
           </Field>

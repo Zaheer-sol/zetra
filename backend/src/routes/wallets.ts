@@ -162,30 +162,40 @@ export function walletRoutes(app: FastifyInstance) {
   route(app, {
     method: "PATCH",
     url: "/v1/wallets/:id",
-    summary: "Rename a wallet or pause/resume monitoring",
+    summary: "Rename a wallet, set it as default, or pause/resume monitoring",
     tags: ["wallets"],
     permission: "wallets:write",
     params: idParam,
     body: updateWalletInput,
     handler: async ({ params, body, tx, organizationId, environment, actor }) =>
       tx(async (c) => {
+        await c.query("SELECT id FROM organizations WHERE id = $1 FOR UPDATE", [organizationId]);
         const before = (await c.query("SELECT * FROM wallets WHERE id = $1 AND organization_id = $2 AND environment = $3 AND archived_at IS NULL FOR UPDATE", [params.id, organizationId, environment])).rows[0];
         if (!before) throw notFound("wallet");
+        const nextMonitoring = body.monitoring_enabled ?? before.monitoring_enabled;
+        if (body.is_default === true && !nextMonitoring) {
+          throw new ApiError(409, "default_wallet_paused", "A paused wallet cannot be the default receiving wallet. Resume monitoring first.");
+        }
+        if (body.is_default === true) {
+          await c.query("UPDATE wallets SET is_default = false WHERE organization_id = $1 AND environment = $2 AND is_default = true AND archived_at IS NULL", [organizationId, environment]);
+        }
+        const nextDefault = !nextMonitoring && before.is_default === true ? false : body.is_default ?? null;
         const row = (
-          await c.query("UPDATE wallets SET name = COALESCE($2, name), monitoring_enabled = COALESCE($3, monitoring_enabled), updated_at = now() WHERE id = $1 RETURNING *", [
+          await c.query("UPDATE wallets SET name = COALESCE($2, name), monitoring_enabled = COALESCE($3, monitoring_enabled), is_default = COALESCE($4, is_default), updated_at = now() WHERE id = $1 RETURNING *", [
             params.id,
             body.name ?? null,
-            body.monitoring_enabled ?? null
+            body.monitoring_enabled ?? null,
+            nextDefault
           ])
         ).rows[0];
         await audit(c, actor, {
           organizationId,
           environment,
-          action: body.monitoring_enabled === false ? "wallet_monitoring_paused" : body.monitoring_enabled === true ? "wallet_monitoring_resumed" : "wallet_updated",
+          action: body.is_default === true ? "wallet_default_set" : body.monitoring_enabled === false ? "wallet_monitoring_paused" : body.monitoring_enabled === true ? "wallet_monitoring_resumed" : "wallet_updated",
           objectType: "wallet",
           objectId: params.id,
-          previous: { name: before.name, monitoring_enabled: before.monitoring_enabled },
-          next: { name: row.name, monitoring_enabled: row.monitoring_enabled }
+          previous: { name: before.name, monitoring_enabled: before.monitoring_enabled, is_default: before.is_default },
+          next: { name: row.name, monitoring_enabled: row.monitoring_enabled, is_default: row.is_default }
         });
         const fresh = (await c.query("SELECT * FROM wallets WHERE id = $1", [params.id])).rows[0];
         return (await present(c, [fresh]))(fresh);

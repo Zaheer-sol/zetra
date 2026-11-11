@@ -10,6 +10,12 @@ import { audit, EngineError, log, type Actor } from "./context";
 type Row = Record<string, any>;
 
 export async function createWallet(client: Client, organizationId: string, environment: Environment, input: CreateWalletInput, actor: Actor): Promise<Row> {
+  await client.query("SELECT id FROM organizations WHERE id = $1 FOR UPDATE", [organizationId]);
+  const existingDefault = await client.query(
+    "SELECT 1 FROM wallets WHERE organization_id = $1 AND environment = $2 AND is_default = true AND archived_at IS NULL LIMIT 1",
+    [organizationId, environment]
+  );
+  const isDefault = existingDefault.rowCount === 0;
   const network = resolvePaymentNetwork(input.network, environment);
   if (!network?.enabled) throw new EngineError("network_unavailable", `${capitalize(input.network)} isn't available in ${environment} mode on this deployment.`, 422);
   const assets = input.assets.map((symbol) => {
@@ -20,9 +26,9 @@ export async function createWallet(client: Client, organizationId: string, envir
   const id = newId("wallet");
   try {
     await client.query(
-      `INSERT INTO wallets (id, organization_id, environment, network_id, name, address, requested_backfill_from_block, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [id, organizationId, environment, network.id, input.name, input.address, input.backfill_from_block?.toString() ?? null, actor.id ?? null]
+      `INSERT INTO wallets (id, organization_id, environment, network_id, name, address, requested_backfill_from_block, created_by, is_default)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [id, organizationId, environment, network.id, input.name, input.address, input.backfill_from_block?.toString() ?? null, actor.id ?? null, isDefault]
     );
   } catch (error) {
     if (isUniqueViolation(error)) throw new EngineError("wallet_exists", "This address is already a receiving wallet on this network.", 409);
