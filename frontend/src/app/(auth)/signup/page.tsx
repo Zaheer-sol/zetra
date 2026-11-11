@@ -15,7 +15,7 @@ export default function SignupPage() {
   return (
     <>
       <h1>Create your account</h1>
-      <p className="mt-2 text-[1.0625rem] tracking-[-0.012em] text-muted-foreground">Start in test mode. No card required.</p>
+      <p className="mt-2 text-[1.0625rem] tracking-[-0.012em] text-muted-foreground">Start with a clean Live workspace for your business.</p>
       <form
         className="grid gap-4"
         onSubmit={async (e) => {

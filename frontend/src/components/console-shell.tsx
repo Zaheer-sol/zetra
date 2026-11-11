@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useState, type ComponentType, type ReactNode } from "react";
-import { mutate } from "swr";
 import {
   ArrowDownLeft,
   BookMarked,
@@ -15,7 +14,7 @@ import {
   ChevronsUpDown,
   Code2,
   CreditCard,
-  FlaskConical,
+  Sparkles,
   Inbox,
   LayoutGrid,
   ListTree,
@@ -55,7 +54,6 @@ import {
   SidebarTrigger,
   useSidebar
 } from "@/components/ui/sidebar";
-import { Switch } from "@/components/ui/switch";
 import { AssistantButton, AssistantProvider, NotificationsBell } from "./assistant";
 import { SessionProvider, useMe, useSession, type Me } from "./session";
 import { Button, ButtonLink, Logo, useToast } from "./app-ui";
@@ -106,7 +104,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 }
 
 function Frame({ children }: { children: ReactNode }) {
-  const { me, isTest } = useSession();
+  const { isTest } = useSession();
   return (
     <AssistantProvider>
       <SidebarProvider>
@@ -114,8 +112,8 @@ function Frame({ children }: { children: ReactNode }) {
         <SidebarInset className="min-w-0 bg-background">
           {isTest && (
             <div className="flex items-center justify-center gap-2 border-b border-warning/25 bg-warning/10 px-4 py-[7px] text-center text-sm font-medium text-warning" role="note">
-              <FlaskConical className="size-3.5 shrink-0" aria-hidden="true" />
-              Test mode uses isolated test data. Simulated payments do not move funds.
+              <Sparkles className="size-3.5 shrink-0" aria-hidden="true" />
+              Zetra Demo workspace · Sample records are for demonstration; simulated payments do not move funds.
             </div>
           )}
           <Topbar />
@@ -254,7 +252,6 @@ function ConsoleSidebar() {
         <MoreGroup open={moreActive}>{renderLinks(more)}</MoreGroup>
       </SidebarContent>
       <SidebarFooter className="gap-2 px-3 pb-3">
-        <ModeToggle />
         <nav aria-label="Account">{renderLinks([{ href: "/app/settings", label: "Settings", icon: Settings }])}</nav>
         <UserMenu />
       </SidebarFooter>
@@ -304,35 +301,6 @@ function WorkspaceSwitcher() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-function ModeToggle() {
-  const { me, refresh } = useSession();
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const test = me.environment === "test";
-  const toggle = async () => {
-    setBusy(true);
-    try {
-      await api("/v1/session/environment", { method: "POST", body: { environment: test ? "live" : "test" } });
-      await refresh();
-      await mutate(() => true, undefined, { revalidate: true });
-      toast("info", test ? "Switched to live mode." : "Switched to test mode.");
-    } catch (e) {
-      toast("error", (e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="flex items-center justify-between gap-2.5 rounded-xl bg-card px-3 py-2.5 shadow-card">
-      <div>
-        <div className="text-sm font-semibold">Test mode</div>
-        <div className="text-xs text-muted-foreground">{test ? "Test mode" : "Live mode"}</div>
-      </div>
-      <Switch checked={test} onCheckedChange={toggle} disabled={busy} aria-label="Test mode" className="data-[state=checked]:bg-warning" />
-    </div>
   );
 }
 

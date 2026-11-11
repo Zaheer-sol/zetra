@@ -1,7 +1,7 @@
 # Accountant review checklist
 
 Use this checklist to review Zetra's books in about 30 minutes. Sign in to the deterministic demo
-workspace in Test mode, open **Books**, and answer each item with **Yes / No / Unsure** plus a note.
+Zetra Demo workspace, open **Books**, and answer each item with **Yes / No / Unsure** plus a note.
 
 ## The ledger
 

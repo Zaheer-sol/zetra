@@ -17,7 +17,7 @@ export default function DevelopersLayout({ children }: { children: ReactNode }) 
           { href: "/app/developers/api-keys", label: "API keys" },
           { href: "/app/developers/webhooks", label: "Webhooks" },
           { href: "/app/developers/events", label: "Events" },
-          ...(me.environment === "test" ? [{ href: "/app/developers/test-mode", label: "Test payments" }] : [])
+          ...(me.environment === "test" ? [{ href: "/app/developers/test-mode", label: "Demo scenarios" }] : [])
         ]}
       />
       {children}

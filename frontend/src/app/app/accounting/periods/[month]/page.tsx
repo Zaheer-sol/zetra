@@ -186,7 +186,7 @@ function MonthView() {
 
       <Card
         title="Proof of Close"
-        description="A deterministic fingerprint of this period's posted journal, payment evidence, and report totals. Local/test mode stays prepared until an authorized NEAR contract is configured."
+        description="A deterministic fingerprint of this period's posted journal, payment evidence, and report totals. Local and demo workspaces stay prepared until an authorized NEAR contract is configured."
         actions={<Button variant="secondary" icon={<Fingerprint />} loading={proofBusy} onClick={previewProof}>Preview hash</Button>}
       >
         <div className="grid gap-4 px-6 py-5 max-md:px-4">

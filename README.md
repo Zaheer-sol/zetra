@@ -82,9 +82,10 @@ Email: demo@zetra.local
 Password: Zetra-Demo-2026!
 ```
 
-The demo account opens its preloaded workspace in Test mode. Signing up with your own email creates
-a separate, empty workspace in Live mode; it never receives the demo invoices or payments. Switch
-that account to Test mode when you want to use testnet or simulated-payment data.
+The demo account opens its preloaded Zetra Demo workspace. Its sample records and simulated payments
+stay with that account; simulations do not move funds. There is no workspace mode switch. Signing up
+with your own email creates a separate, empty Live workspace and never receives demo invoices or
+payments.
 
 The API runs on [http://localhost:4000](http://localhost:4000).
 

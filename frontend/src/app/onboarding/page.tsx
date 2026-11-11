@@ -182,7 +182,6 @@ function Onboarding() {
                 </fieldset>
                 <p className="text-sm text-muted-foreground">Zetra reads public activity on configured networks. Funds and signing authority stay in your wallet.</p>
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <Badge tone="info">Test mode</Badge>
                   {selectedNetwork ? (
                     <>
                       <Chain network={wallet.network} name={selectedNetwork.name} />
@@ -215,7 +214,7 @@ function Onboarding() {
                 <Field label="Name" htmlFor="ob-wname">
                   <Input id="ob-wname" value={wallet.name} onChange={(e) => setWallet((w) => ({ ...w, name: e.target.value }))} />
                 </Field>
-                <Alert tone="neutral">You start in test mode. Use the console switch to access live data.</Alert>
+                <Alert tone="neutral">This is a new business workspace with its own books. It starts in Live mode; the Zetra Demo sample data stays in the separate demo account.</Alert>
                 <Button type="submit" variant="primary" size="lg" loading={busy} disabled={(setup === "collect" && (!selectedNetwork || !selectedNetwork.assets.length || !wallet.address.trim())) || (!!wallet.address.trim() && (!selectedNetwork || !selectedNetwork.assets.length || !addressValid))}>
                   {setup === "books" ? "Open my books" : setup === "connect" ? "Connect my store" : "Continue"}
                 </Button>

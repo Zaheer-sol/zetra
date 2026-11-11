@@ -137,7 +137,7 @@ export function ChainMark({ className, network }: { className?: string; network?
 
 export function SimulatedTag() {
   return (
-    <UIBadge variant="neutral" className="h-5 rounded-md px-1.5 text-[11px]" title="Simulated in test mode. No funds moved.">
+    <UIBadge variant="neutral" className="h-5 rounded-md px-1.5 text-[11px]" title="Simulated demo record. No funds moved.">
       Simulated
     </UIBadge>
   );

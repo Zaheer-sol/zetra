@@ -74,8 +74,8 @@ async function ensureInvoice(input: Record<string, unknown>) {
 
 try {
   await signIn();
-  await request("POST", "/v1/session/environment", { environment: "test" });
   await withGlobal((c) => c.query("UPDATE users SET default_environment = 'test' WHERE lower(email) = $1", [DEMO_EMAIL]));
+  await request("POST", "/v1/session/environment", { environment: "test" });
   await request("PATCH", "/v1/organization", { onboarding_completed: true });
   const wallet = await ensureWallet();
   const acme = await ensureCustomer("Acme Creative Studio", "accounts@acme.test", "DEMO-CUSTOMER-ACME", "acme-payer.testnet");

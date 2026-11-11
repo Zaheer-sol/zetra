@@ -49,7 +49,7 @@ const STAGES = [
     name: "Connect",
     title: "Let your own software act on every payment",
     body: "Create customers, orders and invoices through the API. Versioned financial events and signed webhooks let your systems act on the same conclusions shown in the console.",
-    points: ["HMAC-SHA256 signatures with timestamps", "Retries, attempt history and replay", "Test mode runs the same pipeline as live"]
+    points: ["HMAC-SHA256 signatures with timestamps", "Retries, attempt history and replay", "Simulated payment events use the same reconciliation pipeline"]
   }
 ];
 

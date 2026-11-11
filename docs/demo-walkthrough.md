@@ -20,12 +20,12 @@ demo@zetra.local
 Zetra-Demo-2026!
 ```
 
-The demo login opens its seeded workspace in Test mode. New signups get a separate empty workspace
-and start in Live mode; switching modes never copies demo data into another account.
+The demo login opens its seeded Zetra Demo workspace. New signups get a separate empty Live workspace.
+Demo records stay with the demo account, and simulated payments do not move funds. There is no mode switch.
 
 ## Follow the money
 
-1. On **Dashboard**, confirm the workspace is in Test mode and the books-health card reports that
+1. On **Dashboard**, confirm the Zetra Demo workspace and the books-health card reports that
    the trial balance and receivables agree.
 2. Open **Invoices**. `DEMO-001` and `DEMO-002` are paid; `DEMO-003` is open for `$1,550.00`.
 3. Open `DEMO-001`, then its hosted payment page. Inspect the NEAR receiving account, amount, asset,
@@ -40,7 +40,7 @@ and start in Live mode; switching modes never copies demo data into another acco
    state when no contract signer is configured. Previewing never creates a blockchain transaction.
 8. Open a payment detail page and walk through its **Evidence graph** from invoice and payment
    request through the simulated receipt, matching decision, reconciliation and journal entry.
-9. Open **Developers → Test payments** and run the labelled stress scenarios (partial, duplicate,
+9. Open **Developers → Demo scenarios** and run the labelled stress scenarios (partial, duplicate,
    wrong token, late, split and reversal). Every result follows the normal pipeline and is marked
    `Simulation — no on-chain transaction.`
 10. Run `npm run demo:verify` in a terminal to independently assert the exact accounting totals.

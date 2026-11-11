@@ -21,7 +21,7 @@ export default function DevelopersPage() {
     { href: "/app/developers/api-keys", icon: <KeyRound />, title: "API keys", body: keys ? `${keys.data.filter((k) => !k.revoked_at).length} active` : "…" },
     { href: "/app/developers/webhooks", icon: <Webhook />, title: "Webhooks", body: endpoints ? `${endpoints.data.length} endpoint${endpoints.data.length === 1 ? "" : "s"}` : "…" },
     { href: "/app/developers/events", icon: <Radio />, title: "Financial events", body: events?.data[0] ? `Latest: ${eventLabel[events.data[0].type] ?? events.data[0].type}` : "No events yet" },
-    ...(isTest ? [{ href: "/app/developers/test-mode", icon: <FlaskConical />, title: "Test payments", body: "Exercise every payment outcome" }] : [])
+    ...(isTest ? [{ href: "/app/developers/test-mode", icon: <FlaskConical />, title: "Demo scenarios", body: "Exercise every payment outcome with simulated records" }] : [])
   ];
 
   return (
@@ -91,7 +91,7 @@ app.post("/zetra", express.raw({ type: "application/json" }), (req, res) => {
           <BookOpen className="size-[18px] text-primary" aria-hidden="true" />
           <span>
             <strong>Read the docs</strong>
-            <span className="block text-sm text-muted-foreground">Quickstart, NEAR payment details, API reference, webhooks, errors and test mode.</span>
+            <span className="block text-sm text-muted-foreground">Quickstart, NEAR payment details, API reference, webhooks, errors and demo scenarios.</span>
           </span>
         </span>
         <ArrowRight size={16} aria-hidden="true" />

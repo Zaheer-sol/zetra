@@ -111,10 +111,14 @@ export function authRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.post("/v1/session/environment", { schema: { tags: ["auth"], summary: "Switch the console between test and live mode" } }, async (request) => {
+  app.post("/v1/session/environment", { schema: { tags: ["auth"], summary: "Restore the environment assigned to this account" } }, async (request) => {
     const p = request.principal;
     if (p?.kind !== "user") throw new ApiError(401, "unauthenticated", "Sign in to continue.");
     const { environment } = parse(z.object({ environment: z.enum(["test", "live"]) }), request.body, "body");
+    const account = (await withGlobal((c) => c.query("SELECT default_environment FROM users WHERE id = $1", [p.userId]))).rows[0];
+    if (!account || environment !== account.default_environment) {
+      throw new ApiError(403, "environment_fixed", "This account uses its assigned workspace environment. Demo data stays with the Zetra Demo account; new business accounts use Live mode.");
+    }
     await withGlobal((c) => c.query("UPDATE sessions SET environment = $1 WHERE id = $2", [environment, p.sessionId]));
     return { ok: true, environment };
   });

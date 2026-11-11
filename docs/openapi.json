@@ -153,7 +153,7 @@
     },
     "/v1/session/environment": {
       "post": {
-        "summary": "Switch the console between test and live mode",
+        "summary": "Restore the environment assigned to this account",
         "tags": [
           "auth"
         ],

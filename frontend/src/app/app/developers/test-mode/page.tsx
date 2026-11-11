@@ -41,8 +41,8 @@ export default function TestModePage() {
   if (!isTest) {
     return (
       <div className="grid gap-6 [&>*]:min-w-0">
-        <PageHeader title="Test payments" />
-        <Alert tone="info" title="Switch to test mode">Simulated payments exist only in test mode. Use the Test mode switch in the sidebar.</Alert>
+        <PageHeader title="Demo scenarios" />
+        <Alert tone="info" title="Available in the Zetra Demo workspace">Simulated payment scenarios are kept in the demo account. They do not move funds.</Alert>
       </div>
     );
   }
@@ -50,8 +50,8 @@ export default function TestModePage() {
   return (
     <div className="grid gap-6 [&>*]:min-w-0">
       <PageHeader
-        breadcrumbs={[{ label: "Developers", href: "/app/developers" }, { label: "Test payments" }]}
-        title="Test payments"
+        breadcrumbs={[{ label: "Developers", href: "/app/developers" }, { label: "Demo scenarios" }]}
+        title="Demo scenarios"
         description="Send simulated payments through the same pipeline used for configured networks: matching, exceptions, events and webhooks. Simulations do not move funds onchain."
       />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px] [&>*]:min-w-0">
@@ -108,7 +108,7 @@ export default function TestModePage() {
         <div className="grid gap-6 [&>*]:min-w-0">
           <Card title="Network setup" padded>
             <p className="text-sm text-muted-foreground">
-              Real transfers in test mode depend on the networks enabled by your server configuration. Configure the network, RPC endpoint and token contract before monitoring payments.
+              Real NEAR testnet transfers depend on the network enabled by your server configuration. Configure its RPC endpoint and token contract before monitoring payments.
             </p>
           </Card>
           <Card title="Reorgs" padded>

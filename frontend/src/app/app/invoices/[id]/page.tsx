@@ -278,7 +278,7 @@ export default function InvoiceDetailPage() {
               {isTest && open && can("simulate") && (
                 <div className="mt-1.5 grid gap-3">
                   <SectionTitle className="flex items-center gap-1.5">
-                    <FlaskConical className="size-3" aria-hidden="true" /> Test mode
+                    <FlaskConical className="size-3" aria-hidden="true" /> Demo scenarios
                   </SectionTitle>
                   <div className="flex flex-wrap gap-1.5">
                     <Button size="sm" loading={simulating === "exact"} onClick={() => simulate("exact")}>

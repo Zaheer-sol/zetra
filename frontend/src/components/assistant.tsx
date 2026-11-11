@@ -184,7 +184,7 @@ export function AssistantPanel({ onClose, full = false }: { onClose?: () => void
           <Zeti mood={busy ? "focused" : "welcome"} size={38} idle={false} enter={false} key={busy ? "busy" : "idle"} />
           <div className="grid gap-px">
             <strong className="font-semibold">Zeti</strong>
-            <span className="text-xs text-muted-foreground">{isTest ? "Test mode" : "Live mode"}</span>
+            <span className="text-xs text-muted-foreground">{isTest ? "Zetra Demo" : "Live workspace"}</span>
           </div>
         </div>
         <div className="flex gap-1">
@@ -368,7 +368,7 @@ function ListRow({ href, title, sub, right, rightSub, subMuted }: { href: string
   );
 }
 
-const TestBadge = () => <Badge tone="warning">Test mode</Badge>;
+const TestBadge = () => <Badge tone="warning">Demo example</Badge>;
 const Amount = ({ children }: { children: ReactNode }) => <span className="tabular text-2xl font-semibold tracking-[-0.028em]">{children}</span>;
 
 function BlockView({ block: b, onChoose, onDecide, resolved, busy }: { block: Block; onChoose: (label: string, value: string) => void; onDecide: (id: string, d: "confirm" | "cancel") => void; resolved: Record<string, string>; busy: boolean }) {

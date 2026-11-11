@@ -194,7 +194,7 @@ export function TxProof({ hash, url, simulated }: { hash?: string | null; url?: 
       {shortAddress(hash, 8, 6)} <ExternalLink className="size-3" aria-hidden="true" />
     </a>
   ) : (
-    <span className="font-mono text-xs text-muted-foreground" title={simulated ? "Simulated in test mode" : undefined}>
+    <span className="font-mono text-xs text-muted-foreground" title={simulated ? "Simulated demo record; no funds moved" : undefined}>
       {shortAddress(hash, 8, 6)}
       {simulated && " (simulated)"}
     </span>

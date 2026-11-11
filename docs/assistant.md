@@ -44,7 +44,7 @@ message → parser (typed intent) → orchestrator → Zetra API (in-process, as
   wallets accept exactly one; the network follows the selected receiving wallet.
 - **Confirmation before anything is created or changed.** The confirmation is a one-time action tied
   to the user, workspace and mode; it expires after 15 minutes, can't be confirmed from another
-  workspace or after switching test ↔ live, and its id is the `Idempotency-Key` of the API call, so a
+  workspace or after switching workspace, and its id is the `Idempotency-Key` of the API call, so a
   double click creates one payment request.
 - **Roles apply.** A viewer can ask questions but not create; creating customers or moving payments
   needs the corresponding role.

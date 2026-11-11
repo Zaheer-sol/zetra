@@ -19,7 +19,7 @@ export default function PaymentDetailPage() {
     <PageHeader breadcrumbs={[{ label: "Payments", href: "/app/payments" }, { label: "Payment" }]} />
     <Card>
       <CardBody className="grid gap-4 py-6">
-        <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><PaymentStatus status={p.status} />{p.simulated && <SimulatedTag />}</div><BigMoney value={p.amount} asset={p.asset?.symbol ?? "Token"} /><p className="mt-2 text-sm text-muted-foreground">{p.simulated ? "Simulated in test mode. No funds moved and no on-chain transaction occurred." : "Finalized NEAR transfer evidence is retained with this payment."}</p></div>{!p.simulated && p.explorer_url && <ButtonLink href={p.explorer_url} target="_blank" rel="noreferrer" icon={<ExternalLink />}>View transaction</ButtonLink>}</div>
+        <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><PaymentStatus status={p.status} />{p.simulated && <SimulatedTag />}</div><BigMoney value={p.amount} asset={p.asset?.symbol ?? "Token"} /><p className="mt-2 text-sm text-muted-foreground">{p.simulated ? "Simulated demo record. No funds moved and no on-chain transaction occurred." : "Finalized NEAR transfer evidence is retained with this payment."}</p></div>{!p.simulated && p.explorer_url && <ButtonLink href={p.explorer_url} target="_blank" rel="noreferrer" icon={<ExternalLink />}>View transaction</ButtonLink>}</div>
         {exception && <Alert tone="warning" title={exception.summary} actions={<ButtonLink size="sm" href={`/app/exceptions/${exception.id}`}>Review</ButtonLink>}>{exception.detail}</Alert>}
       </CardBody>
     </Card>
