@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { cancelPayout, approvePayout, createPayoutRequest, createRefundRequest, serializePayout } from "@zetra/engine";
-import { createPayoutInput, payoutActionInput, payoutListQuery, refundInput } from "@zetra/schemas";
+import { cancelPayout, approvePayout, confirmWalletSignedRefund, createPayoutRequest, createRefundRequest, serializePayout } from "@zetra/engine";
+import { createPayoutInput, payoutActionInput, payoutListQuery, refundInput, refundWalletConfirmationInput } from "@zetra/schemas";
 import { idParam, route } from "../lib/route";
 
 export function payoutRoutes(app: FastifyInstance) {
@@ -83,5 +83,19 @@ export function payoutRoutes(app: FastifyInstance) {
       reply.code(201);
       return serializePayout(row);
     })
+  });
+
+  route(app, {
+    method: "POST",
+    url: "/v1/payouts/:id/confirm-wallet",
+    summary: "Verify and record a finalized refund signed by the business NEAR wallet",
+    tags: ["payouts"],
+    permission: "financials:approve",
+    idempotent: true,
+    params: idParam,
+    body: refundWalletConfirmationInput,
+    handler: async ({ params, body, tx, organizationId, environment, actor }) => tx(async (c) =>
+      serializePayout(await confirmWalletSignedRefund(c, organizationId, environment, params.id, body.transaction_hash, actor))
+    )
   });
 }

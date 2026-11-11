@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { ExternalLink } from "lucide-react";
 import { PaymentStatus } from "@/components/payment-tables";
+import { RefundAction } from "./refund-action";
 import { Address, Alert, BigMoney, ButtonLink, Card, CardBody, Chain, DetailGrid, ErrorState, KV, PageHeader, SimulatedTag, SkeletonBlock, Stack, TextLink } from "@/components/app-ui";
 import { useApi } from "@/lib/api";
 import { dateTime } from "@/lib/format";
@@ -26,6 +27,7 @@ export default function PaymentDetailPage() {
       <Card title="Transfer"><CardBody><KV items={[["Network", <Chain key="network" network={p.network} name={p.network_name} />], ["From", <Address key="from" value={p.sender} full />], ["To", <Address key="to" value={p.recipient} full />], ["Asset", p.asset?.symbol ?? "Unknown token"], ["Received", dateTime(p.paid_at)], ["Transaction", p.simulated ? "Simulated, no on-chain transaction" : <Address key="tx" value={p.transaction_hash} href={p.explorer_url} full />]]} /></CardBody></Card>
       <Card title="Invoice"><CardBody>{p.invoice ? <TextLink href={`/app/invoices/${p.invoice.id}`}>{p.invoice.number ?? "Open invoice"}</TextLink> : <span className="text-muted-foreground">Not assigned to an invoice.</span>}</CardBody></Card>
     </DetailGrid>
+    {p.network_id?.startsWith("near:") && p.asset?.address && <RefundAction payment={p} onConfirmed={() => { void mutate(); }} />}
     {p.decision && <Card title="Matching decision" description={p.decision.explanation}><CardBody><ul className="grid gap-2 text-sm">{p.decision.checks?.map((check: any, index: number) => <li key={index}>{check.label ?? check}</li>)}</ul></CardBody></Card>}
     {graph && <Card title="Evidence graph" description="Why this payment was accepted, held, or posted. Every node links back to stored evidence."><CardBody><ol className="grid gap-3">{graph.nodes.map((node: any, index: number) => <li key={`${node.type}-${index}`} className="flex gap-3 text-sm"><span className="mt-1 size-2 shrink-0 rounded-full bg-primary" /><span className="min-w-0"><span className="font-medium capitalize">{node.type.replaceAll("_", " ")}</span><span className="ml-2 text-muted-foreground">{node.status}</span><p className="text-muted-foreground">{node.explanation}</p>{node.explorer_url && <a className="text-primary hover:underline" href={node.explorer_url} target="_blank" rel="noreferrer">View on explorer</a>}</span></li>)}</ol></CardBody></Card>}
   </Stack>;

@@ -15,7 +15,7 @@ type Row = Record<string, any>;
  * so purpose is identical everywhere.
  */
 export const PAYMENT_COLUMNS = `p.*, c.name AS customer_name, i.id AS ctx_invoice_id, i.number AS invoice_number, i.status AS invoice_status,
-  i.title AS invoice_title, i.purpose AS invoice_purpose, w.name AS wallet_name`;
+  i.title AS invoice_title, i.purpose AS invoice_purpose, w.name AS wallet_name, w.address AS wallet_address`;
 export const PAYMENT_FROM = `FROM payments p LEFT JOIN customers c ON c.id = p.customer_id
   LEFT JOIN invoices i ON i.id = COALESCE(p.invoice_id, CASE WHEN p.status = 'confirming' THEN p.provisional_invoice_id END)
   JOIN wallets w ON w.id = p.wallet_id`;
@@ -27,7 +27,7 @@ export const presentPayment = (row: Row) =>
     invoice: row.ctx_invoice_id
       ? { id: row.ctx_invoice_id, number: row.invoice_number, status: row.invoice_status, title: row.invoice_title, purpose: row.invoice_purpose }
       : null,
-    wallet: { id: row.wallet_id, name: row.wallet_name }
+    wallet: { id: row.wallet_id, name: row.wallet_name, address: row.wallet_address }
   });
 
 /** Shared by the list endpoint and CSV export so both apply identical filters. */

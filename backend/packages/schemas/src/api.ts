@@ -236,6 +236,7 @@ export const refundInput = z.object({
   memo: z.string().trim().max(200).optional(),
   idempotency_key: z.string().trim().min(8).max(120)
 });
+export const refundWalletConfirmationInput = z.object({ transaction_hash: z.string().trim().min(32).max(128).regex(/^[A-Za-z0-9]+$/) });
 export const payoutListQuery = listQuery.extend({ status: z.enum(["pending_approval", "approved", "submitting", "submitted", "confirmed", "failed", "cancelled"]).optional() });
 
 export const paymentSourceEventListQuery = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50) });

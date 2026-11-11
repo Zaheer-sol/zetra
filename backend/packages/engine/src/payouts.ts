@@ -1,6 +1,6 @@
-import { appEnv, paymentAssetById, paymentNetworkById } from "@zetra/config";
+import { appEnv, loadNearNetworks, paymentAssetById, paymentNetworkById } from "@zetra/config";
 import { withSystem, type Client } from "@zetra/database";
-import { sendFt, payoutSignerFor } from "@zetra/blockchain";
+import { extractFinalFtTransfers, NearRpcClient, sendFt, payoutSignerFor } from "@zetra/blockchain";
 import { newId, toBaseUnits, type Environment } from "@zetra/schemas";
 import { accountSafely } from "./accounting/posting-rules";
 import { nativeAccount, systemAccount, valueInReporting, type BooksSettings, walletAccount } from "./accounting/chart";
@@ -73,6 +73,7 @@ export async function createRefundRequest(client: Client, organizationId: string
   if (duplicate) return duplicate;
   const payment = (await client.query("SELECT * FROM payments WHERE id = $1 AND organization_id = $2 AND environment = $3 FOR UPDATE", [paymentId, organizationId, environment])).rows[0] as Row | undefined;
   if (!payment) throw new EngineError("payment_not_found", "No such payment.", 404);
+  if (payment.source === "simulated" || !payment.transaction_hash || !payment.from_address) throw new EngineError("payment_not_refundable", "Simulated or incomplete payment evidence cannot be refunded on-chain.", 409);
   if (!["matched", "partial", "overpaid", "needs_review", "dismissed"].includes(payment.status)) throw new EngineError("payment_not_refundable", "Only a finalized payment can be refunded.", 409);
   const asset = payment.asset_id ? paymentAssetById(payment.asset_id)?.asset : undefined;
   if (!asset) throw new EngineError("asset_unknown", "This payment has no supported accounting asset.", 422);
@@ -105,6 +106,70 @@ export async function approvePayout(client: Client, organizationId: string, envi
   await client.query("UPDATE payout_requests SET status = 'approved', approved_by = $2, approved_at = now(), error = NULL, updated_at = now() WHERE id = $1", [payoutId, actor.id ?? null]);
   await audit(client, actor, { organizationId, environment, action: "payout_approved", objectType: "payout", objectId: payoutId, previous: { status: before.status }, next: { status: "approved" } });
   return (await client.query("SELECT * FROM payout_requests WHERE id = $1", [payoutId])).rows[0] as Row;
+}
+
+/**
+ * Confirm a refund signed by the business in its own NEAR wallet. Zetra verifies finalized
+ * token-contract event evidence before recording the payout or posting its accounting entry.
+ */
+export async function confirmWalletSignedRefund(client: Client, organizationId: string, environment: Environment, payoutId: string, transactionHash: string, actor: Actor): Promise<Row> {
+  const payout = (await client.query(
+    `SELECT p.*, w.address AS wallet_address FROM payout_requests p JOIN wallets w ON w.id = p.wallet_id
+      WHERE p.id = $1 AND p.organization_id = $2 AND p.environment = $3 FOR UPDATE OF p`,
+    [payoutId, organizationId, environment]
+  )).rows[0] as Row | undefined;
+  if (!payout) throw new EngineError("not_found", "No such refund request.", 404);
+  if (payout.kind !== "refund") throw new EngineError("not_a_refund", "Only a refund can be confirmed from a business wallet.", 409);
+  if (payout.status === "confirmed" && payout.tx_hash === transactionHash) return payout;
+  if (payout.status !== "pending_approval") throw new EngineError("refund_not_confirmable", `This refund is ${payout.status} and cannot be confirmed from a wallet.`, 409);
+
+  const network = loadNearNetworks().find((candidate) => candidate.id === payout.network_id);
+  if (!network?.enabled || network.environment !== environment) throw new EngineError("network_unavailable", "This refund's NEAR network is not enabled.", 503);
+  const rpc = new NearRpcClient(network);
+  let evidence: Record<string, unknown>;
+  try {
+    evidence = await rpc.getFinalTransactionStatus(transactionHash, String(payout.wallet_address));
+  } catch {
+    throw new EngineError("refund_evidence_unavailable", "Could not verify this refund on NEAR. Retry after the transaction is final; no refund was recorded yet.", 503);
+  }
+  const transaction = evidence.transaction as Row | undefined;
+  if (!transaction || transaction.hash !== transactionHash || String(transaction.signer_id).toLowerCase() !== String(payout.wallet_address).toLowerCase() || String(transaction.receiver_id).toLowerCase() !== String(payout.token_address).toLowerCase()) {
+    throw new EngineError("refund_transaction_mismatch", "This finalized transaction was not sent by the business wallet to the configured token contract.", 422);
+  }
+  const transfers = extractFinalFtTransfers(evidence, new Set([String(payout.token_address)]));
+  const transfer = transfers.find((item) => item.senderAccountId.toLowerCase() === String(payout.wallet_address).toLowerCase()
+    && item.receiverAccountId.toLowerCase() === String(payout.recipient).toLowerCase()
+    && item.amount === BigInt(payout.amount)
+    && (payout.memo == null || item.memo === payout.memo));
+  if (!transfer) throw new EngineError("refund_transfer_not_found", "The finalized transaction does not contain the exact refund transfer requested. No refund was recorded.", 422);
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [transactionHash]);
+  const duplicate = (await client.query("SELECT id FROM payout_requests WHERE tx_hash = $1 AND id <> $2 LIMIT 1", [transactionHash, payout.id])).rows[0];
+  if (duplicate) throw new EngineError("refund_transaction_used", "This transaction has already been recorded against another payout.", 409);
+
+  const outcomeValues = [evidence.transaction_outcome, ...(Array.isArray(evidence.receipts_outcome) ? evidence.receipts_outcome : [])]
+    .map((item) => (item && typeof item === "object" && "outcome" in item ? (item as Row).outcome : null))
+    .filter((item): item is Row => !!item && typeof item === "object");
+  const sumOutcome = (field: "gas_burnt" | "tokens_burnt") => {
+    const values = outcomeValues.map((item) => item[field]).filter((value) => (typeof value === "string" && /^\d+$/.test(value)) || (typeof value === "number" && Number.isSafeInteger(value))).map(BigInt);
+    return values.length ? values.reduce((total, value) => total + value, 0n) : null;
+  };
+  const gasBurnt = sumOutcome("gas_burnt");
+  const fee = sumOutcome("tokens_burnt");
+  const attempt = (await client.query(
+    `INSERT INTO payout_attempts (id, organization_id, environment, payout_id, attempt_number, status, tx_hash, block_hash, gas_burnt, tokens_burnt, fee_yoctonear, raw)
+     VALUES ($1,$2,$3,$4,1,'confirmed',$5,$6,$7,$8,$9,$10) RETURNING *`,
+    [newId("payoutAttempt"), organizationId, environment, payout.id, transactionHash, transfer.blockHash, gasBurnt?.toString() ?? null, fee?.toString() ?? null, fee?.toString() ?? null, JSON.stringify(evidence)]
+  )).rows[0] as Row;
+  await client.query(
+    `UPDATE payout_requests SET status = 'confirmed', tx_hash = $2, block_hash = $3, approved_by = $4,
+       approved_at = now(), submitted_at = now(), confirmed_at = now(), updated_at = now(), error = NULL
+      WHERE id = $1`,
+    [payout.id, transactionHash, transfer.blockHash, actor.id ?? null]
+  );
+  if (fee !== null) await gasAccounting(client, payout, attempt, fee);
+  await payoutAccounting(client, payout, attempt);
+  await audit(client, actor, { organizationId, environment, action: "refund_confirmed", objectType: "payout", objectId: payout.id, previous: { status: payout.status }, next: { status: "confirmed", tx_hash: transactionHash, block_hash: transfer.blockHash } });
+  return (await client.query("SELECT * FROM payout_requests WHERE id = $1", [payout.id])).rows[0] as Row;
 }
 
 export async function cancelPayout(client: Client, organizationId: string, environment: Environment, payoutId: string, reason: string | undefined, actor: Actor): Promise<Row> {
