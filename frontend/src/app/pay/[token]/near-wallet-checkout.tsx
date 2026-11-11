@@ -102,7 +102,12 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
         return;
       }
       const state = data?.verification?.invoice_state as string | undefined;
-      const message = state === "paid" || state === "overpaid"
+      const paymentStatuses = (data?.verification?.payment_statuses ?? []) as string[];
+      const heldForReview = paymentStatuses.includes("needs_review");
+      const applied = paymentStatuses.some((status) => ["matched", "partial", "overpaid"].includes(status));
+      const message = heldForReview
+        ? "Finalized transfer verified and received by the business wallet, but held for review because the invoice was already paid. Contact the merchant if this was an extra payment."
+        : applied
         ? "Finalized transfer verified and applied to this invoice."
         : state === "partially_paid"
           ? "Transfer verified and applied. The invoice now shows its remaining balance."

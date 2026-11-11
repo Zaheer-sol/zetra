@@ -19,8 +19,8 @@ export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { can, isTest } = useSession();
   const toast = useToast();
-  const { data: inv, error, mutate } = useApi<any>(`/v1/invoices/${id}`, { refreshInterval: (d) => (d && ["open", "partially_paid"].includes(d.status) ? 2500 : 15000) });
-  const { data: evidence } = useApi<any>(`/v1/invoices/${id}/evidence`, { refreshInterval: 15000 });
+  const { data: inv, error, mutate } = useApi<any>(`/v1/invoices/${id}`, { refreshInterval: 2000 });
+  const { data: evidence } = useApi<any>(`/v1/invoices/${id}/evidence`, { refreshInterval: 5000 });
   const [cancelOpen, setCancelOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [simulating, setSimulating] = useState<string | null>(null);
@@ -29,6 +29,7 @@ export default function InvoiceDetailPage() {
   if (!inv) return <Stack><SkeletonBlock height={40} /><SkeletonBlock height={200} /><SkeletonBlock height={280} /></Stack>;
 
   const open = inv.status === "open" || inv.status === "partially_paid";
+  const duplicatePayments = (inv.payments ?? []).filter((p: any) => p.review_context?.exception_type === "duplicate_payment");
   const pct = ratio(inv.amount_paid, inv.amount_due);
   const simulate = async (scenario: string) => {
     setSimulating(scenario);
@@ -109,6 +110,16 @@ export default function InvoiceDetailPage() {
                 </div>
               </div>
             )}
+            {duplicatePayments.map((payment: any) => (
+              <Alert
+                key={payment.id}
+                tone="warning"
+                title={`Additional ${payment.amount} ${payment.asset?.symbol ?? inv.asset?.symbol ?? "token"} payment received`}
+                actions={<ButtonLink size="sm" href={`/app/payments/${payment.id}`}>Review refund</ButtonLink>}
+              >
+                This finalized transfer reached the business wallet but was not applied because this invoice was already paid. Review the payment and choose whether to refund it; no refund has been sent.
+              </Alert>
+            ))}
           </>
         }
       >

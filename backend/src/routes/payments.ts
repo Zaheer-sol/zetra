@@ -10,14 +10,20 @@ import { idParam, route } from "../lib/route";
 type Row = Record<string, any>;
 
 /**
- * Payments joined with their business context: the invoice they were applied to or, while still
- * confirming, the invoice they provisionally matched. Shared by lists, detail, dashboard and exports
- * so purpose is identical everywhere.
+ * Payments joined with their business context: the invoice they were applied to, provisionally
+ * matched while confirming, or a single invoice suggested for review. A review suggestion is never
+ * represented as an allocation. Shared by lists, detail, dashboard and exports.
  */
 export const PAYMENT_COLUMNS = `p.*, c.name AS customer_name, i.id AS ctx_invoice_id, i.number AS invoice_number, i.status AS invoice_status,
   i.title AS invoice_title, i.purpose AS invoice_purpose, w.name AS wallet_name, w.address AS wallet_address`;
 export const PAYMENT_FROM = `FROM payments p LEFT JOIN customers c ON c.id = p.customer_id
-  LEFT JOIN invoices i ON i.id = COALESCE(p.invoice_id, CASE WHEN p.status = 'confirming' THEN p.provisional_invoice_id END)
+  LEFT JOIN match_decisions md ON md.id = p.latest_decision_id
+  LEFT JOIN invoices i ON i.id = COALESCE(
+    p.invoice_id,
+    CASE WHEN p.status = 'confirming' THEN p.provisional_invoice_id END,
+    (SELECT e.invoice_id FROM exceptions e WHERE e.payment_id = p.id AND e.invoice_id IS NOT NULL ORDER BY e.created_at DESC LIMIT 1),
+    CASE WHEN p.status = 'needs_review' AND jsonb_array_length(md.candidates) = 1 THEN md.candidates->0->>'invoiceId' END
+  )
   JOIN wallets w ON w.id = p.wallet_id`;
 const PAYMENT_SELECT = `SELECT ${PAYMENT_COLUMNS} ${PAYMENT_FROM}`;
 

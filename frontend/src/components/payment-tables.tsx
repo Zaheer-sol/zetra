@@ -62,7 +62,7 @@ export interface PaymentRow {
   customer: { id: string; name?: string } | null;
   invoice: { id: string; number?: string } | null;
   business_object?: { id: string; number: string | null; title: string | null } | null;
-  purpose_status?: "known" | "provisional" | "unknown";
+  purpose_status?: "known" | "provisional" | "review" | "unknown";
   sender: string;
   transaction_hash: string;
   paid_at: string;
@@ -194,6 +194,7 @@ function PurposeLine({ row }: { row: PaymentRow }) {
       <span className={purposeCls} title={b.title ?? undefined}>
         {b.title ?? `Invoice ${b.number}`}
         {row.purpose_status === "provisional" && <span> · confirming</span>}
+        {row.purpose_status === "review" && <span> · needs review, not applied</span>}
       </span>
     );
   }

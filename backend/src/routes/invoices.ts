@@ -117,13 +117,37 @@ export function invoiceRoutes(app: FastifyInstance) {
             [row.id]
           )
         ).rows;
-        const payments = (await c.query("SELECT * FROM payments WHERE invoice_id = $1 OR (provisional_invoice_id = $1 AND status = 'confirming') ORDER BY id DESC", [row.id])).rows;
-        const exceptions = (await c.query("SELECT * FROM exceptions WHERE invoice_id = $1 ORDER BY id DESC", [row.id])).rows;
+        // Include finalized, unapplied payments whose deterministic match decision points at this
+        // invoice (such as a duplicate payment). They reached the wallet and need review, even
+        // though they must not be counted as invoice allocations until an operator resolves them.
+        const payments = (await c.query(
+          `SELECT p.*, md.exception_type AS related_exception_type,
+                  (p.invoice_id IS NULL AND p.status = 'needs_review' AND md.candidates @> jsonb_build_array(jsonb_build_object('invoiceId', $1))) AS review_candidate
+             FROM payments p LEFT JOIN match_decisions md ON md.id = p.latest_decision_id
+            WHERE p.invoice_id = $1 OR (p.provisional_invoice_id = $1 AND p.status = 'confirming')
+               OR (p.invoice_id IS NULL AND p.status = 'needs_review' AND EXISTS (SELECT 1 FROM exceptions e WHERE e.payment_id = p.id AND e.invoice_id = $1 AND e.status = 'open'))
+               OR (p.invoice_id IS NULL AND p.status = 'needs_review' AND md.candidates @> jsonb_build_array(jsonb_build_object('invoiceId', $1)))
+            ORDER BY p.block_timestamp DESC, p.id DESC`,
+          [row.id]
+        )).rows;
+        const paymentIds = payments.map((p) => p.id);
+        const exceptions = (await c.query(
+          "SELECT * FROM exceptions WHERE invoice_id = $1 OR payment_id = ANY($2::text[]) ORDER BY id DESC",
+          [row.id, paymentIds]
+        )).rows;
         const events = (await c.query("SELECT id, type, created_at, payment_id, resolution_id FROM financial_events WHERE invoice_id = $1 ORDER BY id", [row.id])).rows;
         const auditRows = (await c.query("SELECT action, actor_type, actor_label, created_at, new_state FROM audit_logs WHERE object_type = 'invoice' AND object_id = $1 ORDER BY id", [row.id])).rows;
         return {
           ...invoice,
-          payments: payments.map((p) => serializePayment(p, { invoice: row })),
+          payments: payments.map((p) => ({
+            ...serializePayment({ ...p, ctx_invoice_id: row.id }, { invoice: row }),
+            review_context: p.review_candidate ? {
+              invoice_id: row.id,
+              invoice_number: row.number,
+              exception_type: p.related_exception_type ?? null,
+              unapplied: true
+            } : null
+          })),
           allocations: allocations.map((a) => ({
             id: a.id,
             payment_id: a.payment_id,

@@ -260,7 +260,19 @@ export async function settlePayment(client: Client, paymentId: string, actor: Ac
       decisionId,
       extra: { reason: decision.exceptionType }
     });
-    await openException(client, payment, decision.exceptionType as ExceptionType, { decisionId, decision, customerId: decision.customerId });
+    // A single deterministic candidate (for example, a second transfer carrying the same
+    // invoice memo) is useful context for the operator, but it is not an allocation. Keep the
+    // payment unapplied while attaching its exception to that invoice for review and refund.
+    const candidateInvoiceId = decision.candidates.length === 1 ? decision.candidates[0]!.invoiceId : null;
+    const candidateInvoice = candidateInvoiceId
+      ? (await client.query("SELECT * FROM invoices WHERE id = $1 AND organization_id = $2 AND environment = $3", [candidateInvoiceId, payment.organization_id, payment.environment])).rows[0] as Row | undefined
+      : undefined;
+    await openException(client, payment, decision.exceptionType as ExceptionType, {
+      decisionId,
+      decision,
+      invoice: candidateInvoice ?? null,
+      customerId: decision.customerId
+    });
   }
   return decision;
 }

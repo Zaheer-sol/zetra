@@ -50,3 +50,19 @@ describe("receiving-account validation", () => {
     expect(decision.checks.find((check) => check.code === "receiving_wallet")).toMatchObject({ passed: false, label: "Unsupported receiving account" });
   });
 });
+
+describe("duplicate invoice payments", () => {
+  it("retains a finalized second transfer as a review item instead of silently allocating it twice", () => {
+    const settledInvoice: InvoiceCandidate = {
+      ...invoice,
+      amountPaid: 5_000_000n,
+      status: "paid",
+      paidAt: new Date("2026-11-02T01:00:00.000Z")
+    };
+    const decision = matchPayment(payment, { ...context, invoices: [settledInvoice] });
+
+    expect(decision).toMatchObject({ outcome: "needs_review", invoiceId: null, exceptionType: "duplicate_payment" });
+    expect(decision.candidates).toEqual([expect.objectContaining({ invoiceId: settledInvoice.id })]);
+    expect(decision.explanation).toContain("predates the payment currently applied");
+  });
+});

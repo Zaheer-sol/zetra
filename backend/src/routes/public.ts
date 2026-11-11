@@ -168,13 +168,18 @@ export function publicRoutes(app: FastifyInstance) {
           raw: { standard: "nep141", event: "ft_transfer", memo: event.memo ?? null, event_log: event.eventLog, verification_source: "payer_submitted_final_transaction" }
         }, "settled");
       }
+      const verifiedPayments = await c.query<{ status: string }>(
+        "SELECT status FROM payments WHERE organization_id = $1 AND environment = $2 AND wallet_id = $3 AND transaction_hash = $4 ORDER BY block_timestamp",
+        [snapshot.organization_id, snapshot.environment, snapshot.wallet_id, transaction_hash]
+      );
       const view = await publicView(c, hit.id);
       return {
         ...view,
         verification: {
           recorded: true,
           invoice_state: view.state,
-          transaction_hash: transaction_hash
+          transaction_hash: transaction_hash,
+          payment_statuses: verifiedPayments.rows.map((payment) => payment.status)
         }
       };
     });
@@ -200,7 +205,17 @@ async function publicView(c: Client, invoiceId: string) {
   const asset = network.assets.find((candidate) => candidate.id === inv.asset_id);
   if (!asset) throw new ApiError(503, "asset_unavailable", "This payment request's token is not configured on this deployment.");
   const payments = (
-    await c.query("SELECT * FROM payments WHERE (invoice_id = $1 OR (provisional_invoice_id = $1 AND status = 'confirming')) AND status <> 'reversed' ORDER BY block_timestamp", [invoiceId])
+    await c.query(
+      `SELECT p.*,
+              (p.invoice_id IS NULL AND p.status = 'needs_review' AND md.candidates @> jsonb_build_array(jsonb_build_object('invoiceId', $1))) AS review_candidate
+         FROM payments p LEFT JOIN match_decisions md ON md.id = p.latest_decision_id
+        WHERE p.status <> 'reversed'
+          AND (p.invoice_id = $1 OR (p.provisional_invoice_id = $1 AND p.status = 'confirming')
+            OR (p.invoice_id IS NULL AND p.status = 'needs_review' AND EXISTS (SELECT 1 FROM exceptions e WHERE e.payment_id = p.id AND e.invoice_id = $1 AND e.status = 'open'))
+            OR (p.invoice_id IS NULL AND p.status = 'needs_review' AND md.candidates @> jsonb_build_array(jsonb_build_object('invoiceId', $1))))
+        ORDER BY p.block_timestamp`,
+      [invoiceId]
+    )
   ).rows as Row[];
   const lineItems = (await c.query("SELECT * FROM invoice_line_items WHERE invoice_id = $1 ORDER BY position", [invoiceId])).rows;
   const d = asset.decimals;
@@ -252,6 +267,7 @@ async function publicView(c: Client, invoiceId: string) {
     payments: payments.map((p) => ({
       amount: amount(p.amount, d),
       status: p.status,
+      review_only: Boolean(p.review_candidate),
       transaction_hash: p.source === "simulated" ? null : p.transaction_hash,
       explorer_url: explorerTx(p.transaction_hash, p.source === "simulated", p.network_id),
       simulated: p.source === "simulated",

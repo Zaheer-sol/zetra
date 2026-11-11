@@ -166,20 +166,20 @@ export function serializeInvoice(row: Row, publicAppUrl: string, extra: { custom
 }
 
 /**
- * What a payment is for, taken only from authoritative records: the invoice it was applied to, or,
- * while it is still confirming, the invoice it provisionally matched. A payment with neither has no
- * business object and its purpose is "unknown"; nothing is inferred.
+ * A payment's invoice context comes from its allocation, a provisional match, or one deterministic
+ * review candidate. The latter is explicitly marked as review and never treated as applied.
  */
 export function paymentPurpose(row: Row, invoice?: Row | null) {
   const applied = row.invoice_id && invoice && invoice.id === row.invoice_id;
   const provisional = !row.invoice_id && row.status === "confirming" && row.provisional_invoice_id && invoice && invoice.id === row.provisional_invoice_id;
+  const reviewCandidate = !row.invoice_id && row.status === "needs_review" && invoice && row.ctx_invoice_id === invoice.id;
   const object =
-    applied || provisional
+    applied || provisional || reviewCandidate
       ? { type: "invoice" as const, id: invoice!.id, number: invoice!.number ?? null, title: invoice!.title ?? null, purpose: invoice!.purpose ?? null }
       : null;
   return {
     business_object: object,
-    purpose_status: applied ? ("known" as const) : provisional ? ("provisional" as const) : ("unknown" as const),
+    purpose_status: applied ? ("known" as const) : provisional ? ("provisional" as const) : reviewCandidate ? ("review" as const) : ("unknown" as const),
     context_source: applied ? ((row.context_source as string | null) ?? null) : null
   };
 }
@@ -198,7 +198,7 @@ export function serializePayment(row: Row, extra: { invoice?: Row | null; custom
     ...networkInfo(row.network_id),
     sender: row.from_address,
     recipient: row.to_address,
-    wallet: extra.wallet ? { id: extra.wallet.id, name: extra.wallet.name } : { id: row.wallet_id },
+    wallet: extra.wallet ? { id: extra.wallet.id, name: extra.wallet.name, address: extra.wallet.address ?? null } : { id: row.wallet_id },
     customer: extra.customer ? { id: extra.customer.id, name: extra.customer.name } : row.customer_id ? { id: row.customer_id } : null,
     invoice: extra.invoice && extra.invoice.id === row.invoice_id ? { id: extra.invoice.id, number: extra.invoice.number, status: extra.invoice.status } : row.invoice_id ? { id: row.invoice_id } : null,
     provisional_invoice_id: row.status === "confirming" ? (row.provisional_invoice_id ?? null) : null,

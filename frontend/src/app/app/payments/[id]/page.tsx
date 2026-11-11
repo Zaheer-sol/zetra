@@ -10,8 +10,8 @@ import { dateTime } from "@/lib/format";
 
 export default function PaymentDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: p, error, mutate } = useApi<any>(`/v1/payments/${id}`, { refreshInterval: 10_000 });
-  const { data: graph } = useApi<any>(`/v1/payments/${id}/evidence`, { refreshInterval: 15_000 });
+  const { data: p, error, mutate } = useApi<any>(`/v1/payments/${id}`, { refreshInterval: 2500 });
+  const { data: graph } = useApi<any>(`/v1/payments/${id}/evidence`, { refreshInterval: 5000 });
   if (error) return <Card><ErrorState error={error} retry={() => mutate()} /></Card>;
   if (!p) return <Stack><SkeletonBlock height={180} /><SkeletonBlock height={260} /></Stack>;
   const exception = p.exceptions?.find((item: any) => item.status === "open");
@@ -25,7 +25,7 @@ export default function PaymentDetailPage() {
     </Card>
     <DetailGrid>
       <Card title="Transfer"><CardBody><KV items={[["Network", <Chain key="network" network={p.network} name={p.network_name} />], ["From", <Address key="from" value={p.sender} full />], ["To", <Address key="to" value={p.recipient} full />], ["Asset", p.asset?.symbol ?? "Unknown token"], ["Received", dateTime(p.paid_at)], ["Transaction", p.simulated ? "Simulated, no on-chain transaction" : <Address key="tx" value={p.transaction_hash} href={p.explorer_url} full />]]} /></CardBody></Card>
-      <Card title="Invoice"><CardBody>{p.invoice ? <TextLink href={`/app/invoices/${p.invoice.id}`}>{p.invoice.number ?? "Open invoice"}</TextLink> : <span className="text-muted-foreground">Not assigned to an invoice.</span>}</CardBody></Card>
+      <Card title="Invoice"><CardBody className="grid gap-2">{p.invoice ? <TextLink href={`/app/invoices/${p.invoice.id}`}>{p.invoice.number ?? "Open invoice"}</TextLink> : p.invoice_detail ? <><TextLink href={`/app/invoices/${p.invoice_detail.id}`}>{p.invoice_detail.number ?? "Open invoice"}</TextLink>{p.decision?.exception_type === "duplicate_payment" && <span className="text-sm text-warning">Possible duplicate. This payment is held for review and has not been applied.</span>}</> : <span className="text-muted-foreground">Not assigned to an invoice.</span>}</CardBody></Card>
     </DetailGrid>
     {p.network_id?.startsWith("near:") && p.asset?.address && <RefundAction payment={p} onConfirmed={() => { void mutate(); }} />}
     {p.decision && <Card title="Matching decision" description={p.decision.explanation}><CardBody><ul className="grid gap-2 text-sm">{p.decision.checks?.map((check: any, index: number) => <li key={index}>{check.label ?? check}</li>)}</ul></CardBody></Card>}

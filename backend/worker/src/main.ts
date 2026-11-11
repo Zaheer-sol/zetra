@@ -31,7 +31,10 @@ async function loop(name: string, intervalMs: number, fn: () => Promise<unknown>
       failures += 1;
       log().error(`${name}_failed`, { error: (error as Error).message, failures });
     }
-    const delay = failures ? Math.min(60_000, intervalMs * 2 ** Math.min(failures, 6)) : intervalMs;
+    // Keep chain ingestion responsive through short provider/database hiccups. A one-minute
+    // exponential pause made a single failed poll look like a missing customer payment.
+    const backoffCap = name.startsWith("ingestion_") ? 5_000 : 60_000;
+    const delay = failures ? Math.min(backoffCap, intervalMs * 2 ** Math.min(failures, 6)) : intervalMs;
     await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, delay);
       wakeUp = () => {

@@ -212,7 +212,11 @@ export function matchPayment(payment: ObservedPayment, ctx: MatchContext): Match
       return review("unknown_payment", "The transfer memo references an invoice whose network, wallet, or asset does not match.");
     }
     if (invoice.status === "paid" || invoice.status === "overpaid") {
-      return review("duplicate_payment", `${invoice.number} was already settled when this payment arrived.`, [toCandidate(invoice, ["Payment reference", "Invoice already paid"])], invoice.customerId);
+      const discoveredOutOfOrder = invoice.paidAt && payment.timestamp.getTime() < invoice.paidAt.getTime();
+      const explanation = discoveredOutOfOrder
+        ? `${invoice.number} is settled, but this finalized transfer predates the payment currently applied to it. The receipt may have been indexed out of order; review it before applying or refunding.`
+        : `${invoice.number} was already settled when this payment arrived.`;
+      return review("duplicate_payment", explanation, [toCandidate(invoice, ["Payment reference", "Invoice already paid"])], invoice.customerId);
     }
     if (invoice.status === "cancelled") {
       return review("late_payment", `${invoice.number} was cancelled before this payment arrived.`, [toCandidate(invoice, ["Payment reference", "Invoice cancelled"])], invoice.customerId);
