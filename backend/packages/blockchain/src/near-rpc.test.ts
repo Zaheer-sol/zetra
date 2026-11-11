@@ -95,7 +95,11 @@ describe("NearRpcClient", () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
       jsonrpc: "2.0",
       id: 1,
-      result: { final_execution_status: "FINAL", status: { SuccessValue: "" } }
+      result: {
+        final_execution_status: "FINAL",
+        transaction: { hash: "tx-hash", signer_id: "sender.testnet" },
+        status: { SuccessValue: "" }
+      }
     }));
     const client = new NearRpcClient(network, { fetcher });
 
@@ -104,6 +108,24 @@ describe("NearRpcClient", () => {
       method: "tx",
       params: { tx_hash: "tx-hash", sender_account_id: "sender.testnet", wait_until: "FINAL" }
     });
+  });
+
+  it("rejects a finalized response with a different hash or signer", async () => {
+    const wrongHash = new NearRpcClient(network, {
+      fetcher: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+        jsonrpc: "2.0", id: 1,
+        result: { final_execution_status: "FINAL", transaction: { hash: "other-hash", signer_id: "sender.testnet" } }
+      }))
+    });
+    const wrongSigner = new NearRpcClient(network, {
+      fetcher: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
+        jsonrpc: "2.0", id: 1,
+        result: { final_execution_status: "FINAL", transaction: { hash: "tx-hash", signer_id: "other.testnet" } }
+      }))
+    });
+
+    await expect(wrongHash.getFinalTransactionStatus("tx-hash", "sender.testnet")).rejects.toThrow(/different transaction hash/);
+    await expect(wrongSigner.getFinalTransactionStatus("tx-hash", "sender.testnet")).rejects.toThrow(/different signer/);
   });
 
   it("surfaces non-retryable RPC errors without returning a success-shaped fallback", async () => {

@@ -86,7 +86,7 @@ export function developerRoutes(app: FastifyInstance) {
         ["split", "Split payment", "Two partial receipts settle one invoice."],
         ["refund", "Refund/reversal", "Simulated payment followed by a compensating reversal."],
         ["reorg", "Reorg/reversal", "Simulated block reorganization compensation."],
-        ["unsupported_account", "Unsupported receiving account", "Receipt cannot enter the configured asset/account boundary."]
+        ["unsupported_account", "Unsupported receiving account", "Synthetic transfer sent to another account; it cannot settle an invoice in this business wallet."]
       ].map(([id, label, description]) => ({ id, label, description, simulated: true, note: "Simulation — no on-chain transaction." })) };
     }
   });

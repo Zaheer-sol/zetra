@@ -551,6 +551,7 @@ async function decide(client: Client, paymentId: string, lockInvoices: boolean):
       walletId: wallet.id,
       walletName: wallet.name,
       walletAddress: wallet.address,
+      toAddress: payment.to_address,
       assetId: payment.asset_id,
       assetSymbol: asset?.symbol ?? `${payment.token_address.slice(0, 6)}…${payment.token_address.slice(-4)}`,
       fromAddress: payment.from_address,
@@ -694,6 +695,11 @@ export async function openException(client: Client, payment: Row, type: Exceptio
       summary = `${received} arrived on the wrong network`;
       detail = ctx.decision?.explanation ?? "The payment matches an invoice that expects a different network.";
       recommended = "If you accept this network, assign it to the invoice. Otherwise refund it.";
+      break;
+    case "wrong_receiving_account":
+      summary = `Transfer sent to an unsupported receiving account`;
+      detail = ctx.decision?.explanation ?? "This transfer did not arrive at a wallet monitored for this business.";
+      recommended = "Verify the destination in the transaction. It cannot be applied to these books because the business wallet did not receive it.";
       break;
     case "reversal":
       summary = `Payment reversed`;

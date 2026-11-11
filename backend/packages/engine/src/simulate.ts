@@ -45,6 +45,7 @@ export async function simulatePayment(client: Client, organizationId: string, en
 
   let amount: bigint;
   let from = input.from_address ?? knownSender ?? `simulated-payer-${randomBytes(8).toString("hex")}.testnet`;
+  let recipient = wallet.address;
   let token = tokenAddress;
   let networkMismatch = false;
   let blockTimestamp = options.at ?? (input.at ? new Date(input.at) : new Date());
@@ -105,7 +106,7 @@ export async function simulatePayment(client: Client, organizationId: string, en
       break;
     case "unsupported_account":
       amount = input.amount ? toBaseUnits(input.amount, asset.decimals) : toBaseUnits("100.00", asset.decimals);
-      token = network.assets.find((candidate) => candidate.id !== asset.id)?.contractId ?? UNREGISTERED_NEAR_TOKEN;
+      recipient = `simulated-other-receiver-${randomBytes(8).toString("hex")}.testnet`;
       break;
     default:
       throw new EngineError("unsupported_scenario", "Unsupported scenario.", 422);
@@ -129,7 +130,7 @@ export async function simulatePayment(client: Client, organizationId: string, en
       logIndex: 0,
       tokenAddress: token,
       fromAddress: from,
-      toAddress: wallet.address,
+      toAddress: recipient,
       amount,
       blockTimestamp,
       raw: { simulated: true, scenario: input.scenario, network_mismatch: networkMismatch, memo: input.scenario === "wrong_memo" ? "zetra:invalid-reference" : memo, note: "Simulated in test mode. No funds moved." }

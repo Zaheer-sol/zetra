@@ -12,17 +12,18 @@ import { money } from "@/lib/format";
 
 const SCENARIOS = [
   { key: "exact", title: "Exact payment", desc: "The full remaining amount. Matches deterministically and marks the invoice paid.", needsInvoice: true },
-  { key: "partial", title: "Partial payment", desc: "75% of the remaining amount. Applied only when the sender is a known customer wallet; otherwise it needs review.", needsInvoice: true },
-  { key: "overpaid", title: "Overpayment", desc: "125% of the remaining amount from the customer's wallet. Paid, with an overpayment exception.", needsInvoice: true },
+  { key: "partial", title: "Partial / underpayment", desc: "75% of the remaining amount. The invoice stays partially paid and the remainder stays due.", needsInvoice: true },
+  { key: "overpaid", title: "Overpayment", desc: "125% of the remaining amount. The invoice is overpaid and the excess is retained as customer credit.", needsInvoice: true },
   { key: "duplicate", title: "Duplicate", desc: "The invoice amount again from the customer's wallet, after it's paid.", needsInvoice: true },
   { key: "unknown_sender", title: "Unknown sender", desc: "$740 from a wallet Zetra has never seen. Lands in Needs review with evidence.", needsInvoice: false },
   { key: "wrong_memo", title: "Wrong memo", desc: "A payment with an invalid reference; it cannot be silently matched.", needsInvoice: true },
   { key: "wrong_token", title: "Wrong token", desc: "A token the wallet doesn't accept. Recorded and held outside accounting.", needsInvoice: false },
+  { key: "wrong_network", title: "Wrong network", desc: "A payment on a network different from the invoice. It stays in Needs review.", needsInvoice: false },
   { key: "late", title: "Late payment", desc: "A valid payment received after the invoice due date.", needsInvoice: true },
   { key: "split", title: "Split payment", desc: "Two partial receipts run through the same matching and posting pipeline.", needsInvoice: true },
   { key: "refund", title: "Refund / reversal", desc: "A simulated payment followed by a compensating reversal.", needsInvoice: true },
   { key: "reorg", title: "Simulated reorg", desc: "Invalidates a simulated block and records compensating history.", needsInvoice: true },
-  { key: "unsupported_account", title: "Unsupported account", desc: "Receipt outside the configured token/account boundary.", needsInvoice: false }
+  { key: "unsupported_account", title: "Unsupported receiving account", desc: "A synthetic transfer sent to another account. It cannot settle this business wallet's invoice.", needsInvoice: false }
 ];
 
 export default function TestModePage() {

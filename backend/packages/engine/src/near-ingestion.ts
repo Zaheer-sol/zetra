@@ -1,5 +1,12 @@
 import { loadNearNetworks } from "@zetra/config";
-import { NearDataClient, NearDataMissingBlockError, type NearDataBlockReport } from "@zetra/blockchain";
+import {
+  NearDataClient,
+  NearDataError,
+  NearDataMissingBlockError,
+  NearRpcClient,
+  scanNearFinalBlock,
+  type NearDataBlockReport
+} from "@zetra/blockchain";
 import { withSystem, withTenant } from "@zetra/database";
 import { log } from "./context";
 import { ingestObservation, type WalletRef } from "./pipeline";
@@ -21,6 +28,8 @@ export interface NearTickReport {
 }
 
 export class NearChainIngestor {
+  private nearDataFallbackUntil = 0;
+
   constructor(
     readonly networkId: string,
     private readonly workerId: string,
@@ -36,6 +45,7 @@ export class NearChainIngestor {
     if (!config?.enabled) throw new Error(`NEAR network ${this.networkId} is not enabled`);
     if (config.assets.length === 0) throw new Error(`NEAR network ${this.networkId} has no configured assets`);
     const data = new NearDataClient(config, { apiKey: process.env.FASTNEAR_API_KEY });
+    const rpc = new NearRpcClient(config);
     const wallets = await this.loadWallets();
     if (!(await this.acquireLease(config.startHeight))) {
       return { networkId: config.id, scannedBlocks: 0, transfers: 0 };
@@ -50,7 +60,7 @@ export class NearChainIngestor {
       const monitoredAccounts = new Set(wallets.map((wallet) => wallet.address));
       const tokenContracts = new Set(config.assets.map((asset) => asset.contractId));
       const assetsByContract = new Map(config.assets.map((asset) => [asset.contractId, asset]));
-      const headReport = await data.getLatestFinalBlock(tokenContracts, monitoredAccounts);
+      const headReport = await this.latestFinalReport(data, rpc, tokenContracts, monitoredAccounts);
       const head = headReport.block;
       let cursor = await this.readNextHeight(config.startHeight);
       const cursorBeforeBackfill = cursor.height;
@@ -98,7 +108,7 @@ export class NearChainIngestor {
         try {
           report = height === head.height
             ? headReport
-            : await data.getFinalBlockByHeight(height, tokenContracts, monitoredAccounts);
+            : await this.finalReportByHeight(data, rpc, height, tokenContracts, monitoredAccounts);
         } catch (error) {
           if (!(error instanceof NearDataMissingBlockError)) throw error;
           // NEAR can skip a block height. Only advance when a later finalized block explicitly
@@ -109,7 +119,7 @@ export class NearChainIngestor {
             try {
               successor = candidate === head.height
                 ? headReport
-                : await data.getFinalBlockByHeight(candidate, tokenContracts, monitoredAccounts);
+                : await this.finalReportByHeight(data, rpc, candidate, tokenContracts, monitoredAccounts);
               break;
             } catch (candidateError) {
               if (!(candidateError instanceof NearDataMissingBlockError)) throw candidateError;
@@ -208,6 +218,59 @@ export class NearChainIngestor {
     } finally {
       await this.releaseLease();
     }
+  }
+
+  /** FastNear serves efficient hydrated blocks, but a throttled data endpoint must not stop
+   * invoice confirmation. Fall back to finalized NEAR RPC transaction outcomes, and keep the
+   * provider on cooldown so every poll does not repeat the same 429 retries. */
+  private async latestFinalReport(
+    data: NearDataClient,
+    rpc: NearRpcClient,
+    tokenContracts: ReadonlySet<string>,
+    monitoredAccounts: ReadonlySet<string>
+  ): Promise<NearDataBlockReport> {
+    if (Date.now() < this.nearDataFallbackUntil) {
+      const block = await rpc.getFinalBlock();
+      return scanNearFinalBlock(rpc, block, tokenContracts, monitoredAccounts);
+    }
+    try {
+      return await data.getLatestFinalBlock(tokenContracts, monitoredAccounts);
+    } catch (error) {
+      if (!(error instanceof NearDataError) || !error.retryable) throw error;
+      this.openNearDataFallback(error);
+      const block = await rpc.getFinalBlock();
+      return scanNearFinalBlock(rpc, block, tokenContracts, monitoredAccounts);
+    }
+  }
+
+  private async finalReportByHeight(
+    data: NearDataClient,
+    rpc: NearRpcClient,
+    height: bigint,
+    tokenContracts: ReadonlySet<string>,
+    monitoredAccounts: ReadonlySet<string>
+  ): Promise<NearDataBlockReport> {
+    if (Date.now() < this.nearDataFallbackUntil) {
+      const block = await rpc.getFinalBlockByHeight(height);
+      return scanNearFinalBlock(rpc, block, tokenContracts, monitoredAccounts);
+    }
+    try {
+      return await data.getFinalBlockByHeight(height, tokenContracts, monitoredAccounts);
+    } catch (error) {
+      if (!(error instanceof NearDataError) || !error.retryable) throw error;
+      this.openNearDataFallback(error);
+      const block = await rpc.getFinalBlockByHeight(height);
+      return scanNearFinalBlock(rpc, block, tokenContracts, monitoredAccounts);
+    }
+  }
+
+  private openNearDataFallback(error: NearDataError): void {
+    this.nearDataFallbackUntil = Date.now() + 60_000;
+    log().warn("near_data_rpc_fallback", {
+      networkId: this.networkId,
+      providerStatus: error.httpStatus ?? null,
+      cooldownSeconds: 60
+    });
   }
 
   private async loadWallets(): Promise<NearWallet[]> {

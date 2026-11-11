@@ -153,7 +153,9 @@ function Onboarding() {
                   e.preventDefault();
                   run(async () => {
                     // Coming back to setup (reload, back button) with a wallet already added: carry on with it.
-                    if (wallet.address.trim())
+                    // A wallet is optional for Books/Connect. Save it only when this deployment
+                    // actually has a supported network and the supplied account is valid.
+                    if (wallet.address.trim() && selectedNetwork?.assets.length && addressValid)
                       await api("/v1/wallets", { method: "POST", idempotencyKey: keys.wallet, body: { name: wallet.name, network: wallet.network, address: wallet.address.trim(), assets: selectedNetwork?.assets.includes("USDC") ? ["USDC"] : selectedNetwork?.assets.slice(0, 1) } }).catch((e) => {
                         if ((e as ApiError).code !== "wallet_exists") throw e;
                       });
@@ -189,6 +191,9 @@ function Onboarding() {
                     </>
                   ) : <span className="text-sm text-muted-foreground">No test networks are enabled.</span>}
                 </div>
+                {setup === "collect" && !selectedNetwork?.assets.length && (
+                  <Alert tone="warning">Payment collection is not enabled on this deployment yet. Open your books now, then add a receiving wallet after a NEAR network is configured.</Alert>
+                )}
                 {networkOptions && networkOptions.data.length > 1 && (
                   <Field label="Test network" htmlFor="ob-network">
                     <Select id="ob-network" value={wallet.network} onValueChange={(network) => setWallet((current) => ({ ...current, network }))} options={networkOptions.data.map((network) => ({ value: network.key, label: network.name }))} />
@@ -215,8 +220,8 @@ function Onboarding() {
                   <Input id="ob-wname" value={wallet.name} onChange={(e) => setWallet((w) => ({ ...w, name: e.target.value }))} />
                 </Field>
                 <Alert tone="neutral">This is a new business workspace with its own books. It starts in Live mode; the Zetra Demo sample data stays in the separate demo account.</Alert>
-                <Button type="submit" variant="primary" size="lg" loading={busy} disabled={(setup === "collect" && (!selectedNetwork || !selectedNetwork.assets.length || !wallet.address.trim())) || (!!wallet.address.trim() && (!selectedNetwork || !selectedNetwork.assets.length || !addressValid))}>
-                  {setup === "books" ? "Open my books" : setup === "connect" ? "Connect my store" : "Continue"}
+                <Button type="submit" variant="primary" size="lg" loading={busy} disabled={setup === "collect" && (!selectedNetwork?.assets.length || !wallet.address.trim() || !addressValid)}>
+                  {setup === "books" ? "Open my books" : setup === "connect" ? "Connect my store" : "Continue to payment setup"}
                 </Button>
               </form>
             )}

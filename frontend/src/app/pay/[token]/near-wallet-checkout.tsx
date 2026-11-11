@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { NearConnector } from "@hot-labs/near-connect";
 import { AlertCircle, CheckCircle2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ interface NearPay {
   payment_memo: string;
 }
 
-type Stage = { kind: "idle" } | { kind: "working"; label: string } | { kind: "submitted"; hash: string } | { kind: "error"; message: string };
+type Stage = { kind: "idle" } | { kind: "working"; label: string } | { kind: "submitted"; hash: string; amountBaseUnits: string; verification: "verified" | "pending" | "mismatch"; message: string } | { kind: "error"; message: string };
 interface Preflight {
   network: string;
   token_contract: string;
@@ -52,9 +52,19 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
   const [connector, setConnector] = useState<NearConnector | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [preflight, setPreflight] = useState<Preflight | null>(null);
+  const [existingHash, setExistingHash] = useState("");
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
   const busy = stage.kind === "working";
   const network = pay.network.testnet ? "testnet" : "mainnet";
+
+  useEffect(() => {
+    // After a verified partial payment, the hosted page changes to the new remaining amount.
+    // Reset wallet readiness so the payer can safely pay that balance as a second transfer.
+    if (stage.kind === "submitted" && stage.verification === "verified" && stage.amountBaseUnits !== pay.amount_base_units) {
+      setStage({ kind: "idle" });
+      setPreflight(null);
+    }
+  }, [pay.amount_base_units, stage]);
 
   const checkReadiness = async (payer: string) => {
     const response = await fetch(`/api/v1/public/payment-requests/${encodeURIComponent(token)}/preflight`, {
@@ -68,6 +78,47 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
     const result = data as Preflight;
     setPreflight(result);
     return result;
+  };
+
+  const verifySubmitted = async (hash: string) => {
+    setStage({ kind: "working", label: "Verifying the finalized NEAR transfer…" });
+    try {
+      const response = await fetch(`/api/v1/public/payment-requests/${encodeURIComponent(token)}/verify`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ payer_account_id: accountId, transaction_hash: hash }),
+        cache: "no-store"
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setStage({
+          kind: "submitted",
+          hash,
+          amountBaseUnits: pay.amount_base_units,
+          verification: response.status >= 500 || response.status === 429 ? "pending" : "mismatch",
+          message: data?.error?.message ?? "Zetra could not verify this transaction yet."
+        });
+        onSubmitted();
+        return;
+      }
+      const state = data?.verification?.invoice_state as string | undefined;
+      const message = state === "paid" || state === "overpaid"
+        ? "Finalized transfer verified and applied to this invoice."
+        : state === "partially_paid"
+          ? "Transfer verified and applied. The invoice now shows its remaining balance."
+          : "Transfer verified on NEAR, but it did not settle this invoice automatically. The business may need to review the payment.";
+      setStage({ kind: "submitted", hash, amountBaseUnits: pay.amount_base_units, verification: "verified", message });
+      onSubmitted();
+    } catch {
+      setStage({
+        kind: "submitted",
+        hash,
+        amountBaseUnits: pay.amount_base_units,
+        verification: "pending",
+        message: "NEAR verification is temporarily unavailable. Keep this page open and check again. Do not send a second payment."
+      });
+      onSubmitted();
+    }
   };
 
   const connect = async () => {
@@ -139,8 +190,8 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
         ? outcome.transaction.hash
         : null;
       if (!transactionHash) throw new Error("NEAR did not return a transaction hash. Check your wallet before retrying.");
-      setStage({ kind: "submitted", hash: transactionHash });
       onSubmitted();
+      await verifySubmitted(transactionHash);
     } catch (error) {
       setStage({ kind: "error", message: (error as Error).message || "The transfer was not completed." });
     }
@@ -177,6 +228,27 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
             {busy ? <Spinner /> : <Wallet aria-hidden="true" />}
             {busy ? stage.label : !preflight ? "Retry wallet check" : preflight.can_pay ? `Pay ${money(pay.amount, { currency: false })} ${pay.asset.symbol}` : "Check wallet balances"}
           </Button>
+          {stage.kind !== "submitted" && (
+            <details className="rounded-xl border px-3 py-2.5 text-sm">
+              <summary className="cursor-pointer font-medium">Already sent USDC? Verify the transaction</summary>
+              <form className="mt-3 grid gap-2" onSubmit={(event) => { event.preventDefault(); if (existingHash.trim()) void verifySubmitted(existingHash.trim()); }}>
+                <label className="text-xs text-muted-foreground" htmlFor="existing-near-tx">Final NEAR transaction hash</label>
+                <input
+                  id="existing-near-tx"
+                  value={existingHash}
+                  onChange={(event) => setExistingHash(event.target.value.trim())}
+                  placeholder="Paste the hash from your wallet"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full min-w-0 rounded-xl border bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground">Zetra checks the finalized NEAR transfer before recording it. It never trusts the pasted hash by itself.</p>
+                <Button type="submit" size="sm" variant="secondary" disabled={busy || !existingHash.trim()}>
+                  {busy ? <Spinner /> : null} Verify transaction
+                </Button>
+              </form>
+            </details>
+          )}
         </>
       ) : (
         <Button size="lg" className="w-full" onClick={connect} disabled={busy}>
@@ -185,13 +257,17 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
         </Button>
       )}
       {stage.kind === "submitted" && (
-        <p className="text-sm text-muted-foreground" role="status">
-          <CheckCircle2 className="mr-1 inline size-4 text-success" aria-hidden="true" />
-          Transfer submitted. Waiting for the payment page to update.
-          {pay.network.explorer_url && (
-            <>{" "}<a className="font-medium text-primary hover:underline" href={`${pay.network.explorer_url}/txns/${stage.hash}`} target="_blank" rel="noreferrer">View transaction</a></>
-          )}
-        </p>
+        <div className="grid gap-2 rounded-xl bg-muted/50 px-3 py-2.5 text-sm" role="status">
+          <p className={stage.verification === "verified" ? "text-foreground" : stage.verification === "pending" ? "text-warning" : "text-destructive"}>
+            {stage.verification === "verified" ? <CheckCircle2 className="mr-1 inline size-4 text-success" aria-hidden="true" /> : <AlertCircle className="mr-1 inline size-4" aria-hidden="true" />}
+            {stage.message}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {pay.network.explorer_url && <a className="font-medium text-primary hover:underline" href={`${pay.network.explorer_url}/txns/${stage.hash}`} target="_blank" rel="noreferrer noopener">View transaction</a>}
+            {stage.verification === "pending" && <Button type="button" variant="ghost" size="sm" className="h-auto px-1 py-0.5 text-xs" onClick={() => void verifySubmitted(stage.hash)}>Check confirmation again</Button>}
+            {stage.verification === "mismatch" && <Button type="button" variant="ghost" size="sm" className="h-auto px-1 py-0.5 text-xs" onClick={() => setStage({ kind: "idle" })}>Return to payment options</Button>}
+          </div>
+        </div>
       )}
       {stage.kind === "error" && (
         <p className="rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive" role="alert">

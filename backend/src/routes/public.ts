@@ -2,8 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { loadNearNetworks, paymentNetworkById } from "@zetra/config";
 import { withGlobal, withSystem, withTenant, type Client } from "@zetra/database";
-import { amount, explorerTx, serializeLineItems, simulatePayment, SYSTEM } from "@zetra/engine";
-import { NearRpcClient } from "@zetra/blockchain";
+import { amount, explorerTx, ingestObservation, serializeLineItems, simulatePayment, SYSTEM, type WalletRef } from "@zetra/engine";
+import { extractFinalFtTransfers, NearRpcClient, type NearBlockReference, type NearFtTransferEvent } from "@zetra/blockchain";
 import { ApiError } from "../lib/errors";
 import { parse } from "../lib/route";
 
@@ -86,6 +86,96 @@ export function publicRoutes(app: FastifyInstance) {
         gas_reserve_yocto: gasReserve.toString(),
         can_pay: nearBalance !== null && BigInt(nearBalance) >= nearRequired && BigInt(tokenBalance) >= amountRequired,
         environment: inv.environment
+      };
+    });
+  });
+
+  app.post("/v1/public/payment-requests/:token/verify", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } }, schema: { tags: ["public"], summary: "Verify a payer-submitted finalized NEAR transfer against the invoice" } }, async (request) => {
+    const { token } = parse(tokenParam, request.params, "path");
+    const { payer_account_id, transaction_hash } = parse(z.object({
+      payer_account_id: z.string().min(2).max(64).regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/),
+      transaction_hash: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{40,50}$/)
+    }), request.body, "body");
+    const hit = await locate(token);
+    const snapshot = await withTenant(hit.organization_id, async (c) => {
+      const row = (await c.query(
+        `SELECT i.id, i.organization_id, i.environment, i.network_id, i.asset_id, i.wallet_id, i.public_token,
+                w.name AS wallet_name, w.address AS wallet_address
+           FROM invoices i JOIN wallets w ON w.id = i.wallet_id WHERE i.id = $1`,
+        [hit.id]
+      )).rows[0] as Row | undefined;
+      if (!row) throw new ApiError(404, "not_found", "This payment request is no longer available.");
+      return row;
+    });
+    const network = paymentNetworkById(snapshot.network_id);
+    const asset = network?.assets.find((candidate) => candidate.id === snapshot.asset_id);
+    const rpcNetwork = loadNearNetworks().find((candidate) => candidate.id === snapshot.network_id && candidate.enabled);
+    if (!network?.enabled || network.family !== "near" || !asset || !rpcNetwork) {
+      throw new ApiError(503, "network_unavailable", "This invoice's NEAR network or token is not enabled on this deployment.");
+    }
+
+    let transfers: NearFtTransferEvent[];
+    const rpc = new NearRpcClient(rpcNetwork);
+    try {
+      const result = await rpc.getFinalTransactionStatus(transaction_hash, payer_account_id);
+      transfers = extractFinalFtTransfers(result, new Set([asset.contractId])).filter((event) =>
+        event.transactionHash === transaction_hash &&
+        event.senderAccountId.toLowerCase() === payer_account_id.toLowerCase() &&
+        event.receiverAccountId.toLowerCase() === String(snapshot.wallet_address).toLowerCase()
+      );
+    } catch {
+      throw new ApiError(503, "transaction_verification_unavailable", "Zetra could not verify this transaction's finalized NEAR receipt yet. Keep this page open and check again shortly.");
+    }
+    if (!transfers.length) {
+      throw new ApiError(422, "transaction_does_not_match_invoice", `This finalized transaction does not contain a ${asset.symbol} transfer from ${payer_account_id} to the business wallet. Nothing was recorded for this invoice.`);
+    }
+
+    const blocks = new Map<string, NearBlockReference>();
+    try {
+      for (const event of transfers) {
+        if (!blocks.has(event.blockHash)) blocks.set(event.blockHash, await rpc.getFinalBlockByHash(event.blockHash));
+      }
+    } catch {
+      throw new ApiError(503, "transaction_verification_unavailable", "The transfer is finalized, but Zetra could not read its block details yet. Keep this page open and check again shortly.");
+    }
+
+    return withTenant(hit.organization_id, async (c) => {
+      const wallet = (await c.query(
+        `SELECT id, organization_id, environment, network_id, name, address FROM wallets WHERE id = $1`,
+        [snapshot.wallet_id]
+      )).rows[0] as WalletRef | undefined;
+      if (!wallet) throw new ApiError(409, "receiving_wallet_unavailable", "The invoice receiving wallet is no longer available.");
+      for (const event of transfers) {
+        const block = blocks.get(event.blockHash)!;
+        const timestampMs = block.timestampNanoseconds / 1_000_000n;
+        if (timestampMs > BigInt(Number.MAX_SAFE_INTEGER)) throw new ApiError(503, "invalid_block_timestamp", "NEAR returned an invalid finalized block timestamp.");
+        await ingestObservation(c, wallet, {
+          sourceType: "nep141_transfer",
+          networkId: snapshot.network_id,
+          blockNumber: block.height,
+          blockHash: event.blockHash,
+          transactionHash: event.transactionHash,
+          transactionIndex: 0,
+          logIndex: event.logIndex,
+          outcomeId: event.outcomeId,
+          transferIndex: event.transferIndex,
+          assetId: asset.id,
+          tokenAddress: event.tokenContractId,
+          fromAddress: event.senderAccountId,
+          toAddress: event.receiverAccountId,
+          amount: event.amount,
+          blockTimestamp: new Date(Number(timestampMs)),
+          raw: { standard: "nep141", event: "ft_transfer", memo: event.memo ?? null, event_log: event.eventLog, verification_source: "payer_submitted_final_transaction" }
+        }, "settled");
+      }
+      const view = await publicView(c, hit.id);
+      return {
+        ...view,
+        verification: {
+          recorded: true,
+          invoice_state: view.state,
+          transaction_hash: transaction_hash
+        }
       };
     });
   });

@@ -232,6 +232,15 @@ export class NearRpcClient {
     if (!isRecord(result) || result.final_execution_status !== "FINAL") {
       throw new NearRpcError("NEAR RPC did not return finalized transaction execution", false);
     }
+    if (!isRecord(result.transaction)) {
+      throw new NearRpcError("NEAR RPC returned a finalized result without its transaction", false);
+    }
+    if (result.transaction.hash !== transactionHash) {
+      throw new NearRpcError("NEAR RPC returned a different transaction hash than requested", false);
+    }
+    if (result.transaction.signer_id !== senderAccountId) {
+      throw new NearRpcError("NEAR RPC returned a transaction from a different signer than requested", false);
+    }
     return result;
   }
 }

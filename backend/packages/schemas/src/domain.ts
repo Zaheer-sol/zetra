@@ -32,6 +32,7 @@ export const EXCEPTION_TYPES = [
   "late_payment",
   "wrong_token",
   "wrong_network",
+  "wrong_receiving_account",
   "reversal"
 ] as const;
 export type ExceptionType = (typeof EXCEPTION_TYPES)[number];
@@ -49,6 +50,7 @@ export const ALLOWED_RESOLUTIONS: Record<ExceptionType, ResolutionAction[]> = {
   duplicate_payment: ["assign", "acknowledge", "dismiss"],
   late_payment: ["assign", "dismiss"],
   wrong_network: ["assign", "dismiss"],
+  wrong_receiving_account: ["acknowledge", "dismiss"],
   partial_payment: ["acknowledge", "write_off"],
   overpayment: ["acknowledge"],
   wrong_token: ["dismiss", "acknowledge"],
@@ -123,5 +125,6 @@ export const EXCEPTION_TYPE_LABEL: Record<ExceptionType, string> = {
   late_payment: "Late payment",
   wrong_token: "Wrong token",
   wrong_network: "Wrong network",
+  wrong_receiving_account: "Wrong receiving account",
   reversal: "Payment reversed"
 };

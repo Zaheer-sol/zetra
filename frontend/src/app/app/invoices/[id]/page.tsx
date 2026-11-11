@@ -291,7 +291,7 @@ export default function InvoiceDetailPage() {
                       Overpay
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">Partial and overpayments are matched automatically only when the sender is a known customer wallet, just like real payments.</p>
+                  <p className="text-xs text-muted-foreground">These clearly labelled simulations use the invoice memo to exercise partial balance and customer-credit accounting. No funds move.</p>
                 </div>
               )}
             </CardBody>

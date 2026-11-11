@@ -104,7 +104,9 @@ describe("reconciliation stress scenarios", () => {
     expect((await payment(reorg.payment_id)).status).toBe("reversed");
 
     const unsupported = await run("unsupported_account", { amount: "1.00" });
-    expect((await payment(unsupported.payment_id)).status).toBe("needs_review");
+    const unsupportedPayment = await payment(unsupported.payment_id);
+    expect(unsupportedPayment.status).toBe("needs_review");
+    expect(unsupportedPayment.exceptions[0].type).toBe("wrong_receiving_account");
 
     // The fixture remains deterministic and uses a real known customer address only for the
     // duplicate assertion; no test result above represents an on-chain transaction.

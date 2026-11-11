@@ -75,7 +75,7 @@ describe("findNearFtTransferCandidates", () => {
           }
         : {
             final_execution_status: "FINAL",
-            transaction: { hash: "tx-hash" },
+            transaction: { hash: "tx-hash", signer_id: "payer.testnet" },
             transaction_outcome: {
               id: "outcome-id",
               block_hash: "final-block-hash",

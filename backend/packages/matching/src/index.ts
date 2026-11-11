@@ -15,7 +15,7 @@
  *   5. Otherwise: an exception, with candidates explained.
  */
 
-export const MATCH_RULE_VERSION = "match-v1.1";
+export const MATCH_RULE_VERSION = "match-v1.2";
 
 /** Allowance for clock skew between invoice creation and block timestamps. */
 const ISSUE_GRACE_MS = 5 * 60 * 1000;
@@ -31,7 +31,8 @@ export type ExceptionKind =
   | "duplicate_payment"
   | "late_payment"
   | "wrong_token"
-  | "wrong_network";
+  | "wrong_network"
+  | "wrong_receiving_account";
 
 export interface ObservedPayment {
   networkId?: string;
@@ -40,6 +41,8 @@ export interface ObservedPayment {
   walletId: string;
   walletName: string;
   walletAddress: string;
+  /** Actual token transfer destination. Missing only in older pure matcher fixtures. */
+  toAddress?: string;
   /** Registry asset id, or null when the token is not configured for this NEAR network. */
   assetId: string | null;
   assetSymbol: string;
@@ -172,7 +175,18 @@ export function matchPayment(payment: ObservedPayment, ctx: MatchContext): Match
   // 1. Network and receiving wallet. Ingestion only observes monitored wallets on their own chain,
   //    so these pass by construction; they are recorded because they are part of the explanation.
   checks.push({ code: "network", passed: !payment.networkMismatch, label: payment.networkMismatch ? "Wrong network" : "Supported NEAR network", detail: payment.networkMismatch ? "The receipt arrived on a different network than the invoice expects." : `Observed on ${payment.networkName ?? payment.networkId}, the network this wallet is monitored on` });
-  checks.push({ code: "receiving_wallet", passed: true, label: "Correct receiving wallet", detail: `Sent to ${payment.walletName} (${short(payment.walletAddress)})` });
+  const correctReceiver = payment.toAddress === undefined || payment.toAddress.toLowerCase() === payment.walletAddress.toLowerCase();
+  checks.push({
+    code: "receiving_wallet",
+    passed: correctReceiver,
+    label: correctReceiver ? "Correct receiving wallet" : "Unsupported receiving account",
+    detail: correctReceiver
+      ? `Sent to ${payment.walletName} (${short(payment.walletAddress)})`
+      : `Sent to ${short(payment.toAddress!)} instead of ${payment.walletName} (${short(payment.walletAddress)})`
+  });
+  if (!correctReceiver) {
+    return review("wrong_receiving_account", "This transfer was sent to an account Zetra does not monitor for this business. It cannot settle an invoice in these books.");
+  }
 
   // 2. Asset.
   const assetApproved = payment.assetId !== null && ctx.acceptedAssetIds.includes(payment.assetId);
