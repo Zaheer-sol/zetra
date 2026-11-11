@@ -5,7 +5,7 @@ const root = resolve(import.meta.dirname, "..");
 const envPath = resolve(root, ".env");
 if (existsSync(envPath)) process.loadEnvFile(envPath);
 
-const [{ appEnv }, { closePools }, { buildServer }] = await Promise.all([
+const [{ appEnv }, { closePools, withGlobal }, { buildServer }] = await Promise.all([
   import("../backend/packages/config/src/index.ts"),
   import("../backend/packages/database/src/index.ts"),
   import("../backend/src/server.ts")
@@ -74,6 +74,8 @@ async function ensureInvoice(input: Record<string, unknown>) {
 
 try {
   await signIn();
+  await request("POST", "/v1/session/environment", { environment: "test" });
+  await withGlobal((c) => c.query("UPDATE users SET default_environment = 'test' WHERE lower(email) = $1", [DEMO_EMAIL]));
   await request("PATCH", "/v1/organization", { onboarding_completed: true });
   const wallet = await ensureWallet();
   const acme = await ensureCustomer("Acme Creative Studio", "accounts@acme.test", "DEMO-CUSTOMER-ACME", "acme-payer.testnet");

@@ -79,14 +79,14 @@ export async function resolvePrincipal(request: FastifyRequest): Promise<Princip
   };
 }
 
-export async function createSession(request: FastifyRequest, reply: FastifyReply, userId: string, organizationId: string | null): Promise<void> {
+export async function createSession(request: FastifyRequest, reply: FastifyReply, userId: string, organizationId: string | null, environment: Environment = "live"): Promise<void> {
   const token = randomToken(32);
   const env = appEnv();
   await withGlobal((client) =>
     client.query(
       `INSERT INTO sessions (id, user_id, token_hash, organization_id, environment, expires_at, ip_hash, user_agent)
-       VALUES ($1,$2,$3,$4,'test', now() + make_interval(days => $5), $6, $7)`,
-      [newId("session"), userId, sha256Hex(token), organizationId, SESSION_DAYS, hashIp(request.ip, env.sessionSecret), String(request.headers["user-agent"] ?? "").slice(0, 300)]
+       VALUES ($1,$2,$3,$4,$5, now() + make_interval(days => $6), $7, $8)`,
+      [newId("session"), userId, sha256Hex(token), organizationId, environment, SESSION_DAYS, hashIp(request.ip, env.sessionSecret), String(request.headers["user-agent"] ?? "").slice(0, 300)]
     )
   );
   reply.setCookie(SESSION_COOKIE, token, {

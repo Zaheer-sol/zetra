@@ -26,13 +26,13 @@ export function authRoutes(app: FastifyInstance) {
 
   app.post("/v1/auth/login", { config: authLimit, schema: { tags: ["auth"], summary: "Sign in" } }, async (request, reply) => {
     const input = parse(loginInput, request.body, "body");
-    const user = (await withGlobal((c) => c.query("SELECT id, email, name, password_hash FROM users WHERE lower(email) = $1", [input.email]))).rows[0];
+    const user = (await withGlobal((c) => c.query("SELECT id, email, name, password_hash, default_environment FROM users WHERE lower(email) = $1", [input.email]))).rows[0];
     // Always run the password hash so response time doesn't reveal whether the account exists.
     const ok = await verifyPassword(input.password, user?.password_hash ?? DUMMY_PASSWORD_HASH);
     if (!user || !ok) throw new ApiError(401, "invalid_credentials", "That email and password don't match an account.");
     const membership = (await withGlobal((c) => c.query("SELECT organization_id FROM sessions WHERE user_id = $1 AND organization_id IS NOT NULL ORDER BY created_at DESC LIMIT 1", [user.id]))).rows[0];
     const firstOrg = membership?.organization_id ?? (await firstOrganization(user.id));
-    await createSession(request, reply, user.id, firstOrg);
+    await createSession(request, reply, user.id, firstOrg, user.default_environment === "test" ? "test" : "live");
     return { user: { id: user.id, email: user.email, name: user.name }, organization_id: firstOrg };
   });
 
@@ -74,7 +74,8 @@ export function authRoutes(app: FastifyInstance) {
       await c.query("UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2", [passwordHash, reset.user_id]);
       await c.query("UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [reset.user_id]); // sign out everywhere
     });
-    await createSession(request, reply, reset.user_id, await firstOrganization(reset.user_id));
+    const user = (await withGlobal((c) => c.query("SELECT default_environment FROM users WHERE id = $1", [reset.user_id]))).rows[0];
+    await createSession(request, reply, reset.user_id, await firstOrganization(reset.user_id), user?.default_environment === "test" ? "test" : "live");
     return { ok: true };
   });
 
@@ -123,7 +124,7 @@ export function authRoutes(app: FastifyInstance) {
     if (p?.kind !== "user") throw new ApiError(401, "unauthenticated", "Sign in to continue.");
     const input = parse(createOrganizationInput, request.body, "body");
     const org = await createOrganization({ name: input.name, ownerUserId: p.userId, ownerLabel: p.email });
-    await withGlobal((c) => c.query("UPDATE sessions SET organization_id = $1, environment = 'test' WHERE id = $2", [org.id, p.sessionId]));
+    await withGlobal((c) => c.query("UPDATE sessions SET organization_id = $1, environment = $2 WHERE id = $3", [org.id, p.environment, p.sessionId]));
     return reply.code(201).send({ id: org.id, name: org.name });
   });
 

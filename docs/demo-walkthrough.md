@@ -20,6 +20,9 @@ demo@zetra.local
 Zetra-Demo-2026!
 ```
 
+The demo login opens its seeded workspace in Test mode. New signups get a separate empty workspace
+and start in Live mode; switching modes never copies demo data into another account.
+
 ## Follow the money
 
 1. On **Dashboard**, confirm the workspace is in Test mode and the books-health card reports that
