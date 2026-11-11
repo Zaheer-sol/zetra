@@ -7,8 +7,7 @@ must not be represented as complete until every verification below passes.
 
 1. Create or select a NEAR testnet account controlled by the operator. Never put its seed phrase or
    private key in Zetra.
-2. Confirm the configured USDC test token contract independently. The default
-   `usdc.fakes.testnet` has no real-world value.
+2. Use Circle’s official NEAR Testnet USDC contract: `3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4afcb8af`. Claim USDC from Circle’s faucet with NEAR Testnet selected. Other faucet tokens with the same symbol use different contracts and are not interchangeable.
 3. Obtain only testnet NEAR and test tokens needed for the single transfer.
 4. Set `NEAR_TESTNET_ENABLED=true`, a recent finalized `NEAR_TESTNET_START_HEIGHT`, and the verified
    token contract in `.env`.

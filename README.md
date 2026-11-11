@@ -94,8 +94,7 @@ The API runs on [http://localhost:4000](http://localhost:4000).
 Zetra runs as separate web, API, worker, and PostgreSQL services. See the
 [Railway deployment guide](docs/railway-deployment.md) for service Dockerfiles, commands, required
 variables, and private networking. The local demo credentials above are not production credentials.
-The configured `usdc.fakes.testnet` token has no real-world value; a deployed URL alone does not
-confirm a testnet payment has been submitted or reconciled.
+Testnet payments use Circle’s NEAR Testnet USDC contract (`3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4afcb8af`). Claim from Circle’s faucet with NEAR Testnet selected. A deployed URL alone does not confirm a testnet payment has been submitted or reconciled.
 
 ## Verify the implementation
 
