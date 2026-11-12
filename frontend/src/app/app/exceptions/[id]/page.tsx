@@ -9,13 +9,14 @@ import { Address, Alert, Badge, BigMoney, Button, ButtonLink, Card, CardBody, Ch
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Card as UICard } from "@/components/ui/card";
+import { RefundAction } from "@/app/app/payments/[id]/refund-action";
 import { api, useApi, type ApiError } from "@/lib/api";
 import { dateTime, money, timeAgo } from "@/lib/format";
 
 const ACTION_COPY: Record<string, { title: string; desc: string }> = {
   assign: { title: "Assign to an invoice", desc: "Apply this payment to the invoice it belongs to. Balances and webhooks update immediately." },
   dismiss: { title: "Not a customer payment", desc: "Record it as not applied, for example a treasury transfer or funds you returned." },
-  acknowledge: { title: "Acknowledge", desc: "Confirm that you have handled this payment outside Zetra or will keep it as customer credit." },
+  acknowledge: { title: "Acknowledge", desc: "Record that you kept this as customer credit, refunded it, or handled it outside Zetra." },
   write_off: { title: "Write off the remainder", desc: "Mark the invoice as paid and record the unpaid difference as written off." }
 };
 
@@ -154,6 +155,9 @@ export default function ExceptionDetailPage() {
         </Stack>
 
         <Stack>
+          {e.status === "open" && p.status === "needs_review" && p.network_id?.startsWith("near:") && p.asset?.address && (
+            <RefundAction payment={p} onConfirmed={() => { void mutate(); }} />
+          )}
           {e.status === "open" ? (
             can("exceptions:resolve") ? (
               <ResolveForm exception={e} onDone={() => mutate()} />
@@ -239,8 +243,8 @@ function ResolveForm({ exception: e, onDone }: { exception: any; onDone: () => v
             )}
           </>
         )}
-        <Field label="Reason" htmlFor="reason" hint="Visible in the audit trail. For example: “Customer confirmed by email on Nov 3.”" error={errs.reason}>
-          <Textarea id="reason" required minLength={3} value={reason} onChange={(ev) => setReason(ev.target.value)} placeholder="Why is this the right decision?" invalid={!!errs.reason} />
+        <Field label="Reason" htmlFor="reason" hint="Visible in the audit trail. If you refunded it, include the refund transaction hash." error={errs.reason}>
+          <Textarea id="reason" required minLength={3} value={reason} onChange={(ev) => setReason(ev.target.value)} placeholder={action === "acknowledge" ? "How was this payment handled? Include the refund transaction if refunded." : "Why is this the right decision?"} invalid={!!errs.reason} />
         </Field>
         <Button type="submit" variant="primary" loading={busy} disabled={action === "assign" && !invoiceId}>
           {action === "assign" ? "Assign payment" : action === "write_off" ? "Write off remainder" : action === "dismiss" ? "Mark as not applied" : "Acknowledge"}

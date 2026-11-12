@@ -258,11 +258,16 @@ async function payoutAccounting(client: Client, payout: Row, attempt: Row): Prom
     if (!asset) throw new EngineError("asset_unknown", "Refund asset has no valuation.", 422);
     const { amount, rateSource } = valueInReporting(payout.asset_id, BigInt(payout.amount), settings.reportingCurrency);
     const wallet = await walletAccount(client, payout.organization_id, payout.environment, payout.wallet_id, payout.asset_id);
-    // A refund of an invoiced sale is a contra-revenue entry; an unassigned/overpayment refund
-    // consumes the customer-credit liability instead of inventing revenue.
+    // A review-held receipt has already been booked to Payments to Identify. Refunding it clears
+    // that liability; it must not consume Customer Credits, which were never created for it.
+    const sourcePayment = payout.payment_id
+      ? (await client.query("SELECT status FROM payments WHERE id = $1 AND organization_id = $2 AND environment = $3", [payout.payment_id, payout.organization_id, payout.environment])).rows[0] as Row | undefined
+      : undefined;
     const debit = payout.invoice_id
       ? await systemAccount(client, payout.organization_id, payout.environment, "sales")
-      : await systemAccount(client, payout.organization_id, payout.environment, "customer_credits");
+      : sourcePayment?.status === "needs_review"
+        ? await systemAccount(client, payout.organization_id, payout.environment, "payments_to_identify")
+        : await systemAccount(client, payout.organization_id, payout.environment, "customer_credits");
     const refs: Partial<LineInput> = { payoutAttemptId: attempt.id, assetId: payout.asset_id, assetAmount: BigInt(payout.amount), rateSource };
     await postEntry(client, { organizationId: payout.organization_id, environment: payout.environment, date: new Date(attempt.created_at), description: `Refund ${payout.id}`, memo: "Confirmed outgoing NEAR refund.", sourceType: "refund", sourceId: payout.id, sourceKey: `refund:${payout.id}`, actor: SYSTEM, lines: [{ ...refs, accountId: debit.id, debit: amount, memo: "Customer refund" }, { ...refs, accountId: wallet.id, credit: amount, memo: "NEAR asset sent" }] });
   });

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { NearConnector } from "@hot-labs/near-connect";
 import { AlertCircle, CheckCircle2, RotateCcw, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/components/session";
 import { api, newIdempotencyKey } from "@/lib/api";
 import { money, shortAddress } from "@/lib/format";
 
@@ -38,6 +39,7 @@ function failedExecution(value: unknown): boolean {
 }
 
 export function RefundAction({ payment, onConfirmed }: { payment: RefundPayment; onConfirmed: () => void }) {
+  const { can } = useSession();
   const [connector, setConnector] = useState<NearConnector | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [amount, setAmount] = useState(payment.amount);
@@ -48,6 +50,7 @@ export function RefundAction({ payment, onConfirmed }: { payment: RefundPayment;
   const [idempotencyKey] = useState(newIdempotencyKey);
   const network = payment.testnet ? "testnet" : "mainnet";
   const allowed = !payment.simulated && payment.source !== "simulated" && ["matched", "partial", "overpaid", "needs_review", "dismissed"].includes(payment.status);
+  const authorized = can("financials:write") && can("financials:approve");
 
   const connect = async () => {
     setStage("connecting");
@@ -131,7 +134,7 @@ export function RefundAction({ payment, onConfirmed }: { payment: RefundPayment;
     }
   };
 
-  if (!allowed) return null;
+  if (!allowed || !authorized) return null;
   if (stage === "done" && transactionHash) return <div className="rounded-xl bg-success/10 px-3 py-2.5 text-sm text-success" role="status"><CheckCircle2 className="mr-1 inline size-4" /> Refund finalized and recorded. Transaction: <span className="font-mono">{shortAddress(transactionHash)}</span></div>;
 
   return <div className="grid gap-3 rounded-2xl border p-4">
