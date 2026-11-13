@@ -90,11 +90,18 @@ export async function simulatePayment(client: Client, organizationId: string, en
       break;
     case "late":
       if (!invoice) throw new EngineError("invoice_required", "Choose an invoice for a late-payment scenario.", 422);
+      if (!invoice.due_at && !invoice.expires_at) {
+        throw new EngineError("invoice_deadline_required", "Choose an invoice with a due date or payment-link expiry for a late-payment scenario.", 422);
+      }
       amount = input.amount ? toBaseUnits(input.amount, asset.decimals) : remaining;
-      // Make the scenario deterministic without modifying the invoice or the ledger. If the
-      // invoice has an expiry, place the synthetic receipt immediately after it; otherwise the
-      // normal matching rules will honestly classify it based on the current invoice state.
-      if (!options.at && !input.at && invoice.expires_at) blockTimestamp = new Date(new Date(invoice.expires_at).getTime() + 1000);
+      // Make the scenario deterministic without modifying the invoice or ledger. Due date is the
+      // accounting deadline; payment-link expiry is a fallback when no due date is configured.
+      const cutoff = new Date(invoice.due_at ?? invoice.expires_at).getTime();
+      const requestedTimestamp = options.at ?? (input.at ? new Date(input.at) : null);
+      if (requestedTimestamp && requestedTimestamp.getTime() <= cutoff) {
+        throw new EngineError("payment_not_late", "A late-payment simulation timestamp must be after the invoice due date or payment-link expiry.", 422);
+      }
+      blockTimestamp = requestedTimestamp ?? new Date(cutoff + 1000);
       break;
     case "split":
       if (!invoice) throw new EngineError("invoice_required", "Choose an invoice for a split-payment scenario.", 422);

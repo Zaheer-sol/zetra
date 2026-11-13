@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { closePools, withTenant } from "../packages/database/src";
-import { apiKey, call, server, setupWorkspace, signup, type Session } from "./helpers";
+import { apiKey, call, server, setupTestEnvironment, setupWorkspace, signup, type Session } from "./helpers";
 
 afterAll(async () => {
   await (await server()).close();
@@ -66,6 +66,7 @@ describe("accounting API", () => {
 
   it("every export is named for and headed with the business it belongs to; import files keep their exact layout", async () => {
     const s = await signup("Café Nova & Sons");
+    await setupTestEnvironment(s);
     const report = await call("GET", "/v1/accounting/reports/profit-and-loss?from=2026-08-01&to=2026-08-31&format=csv", auth(s));
     expect(report.headers["content-disposition"]).toBe('attachment; filename="cafe-nova-sons-profit-and-loss-2026-08-01-to-2026-08-31-test.csv"');
     const lines = report.body.replace(/^﻿/, "").split("\r\n");
@@ -109,6 +110,7 @@ describe("accounting API", () => {
 
   it("permissions: developers don't see the books; operators draft but can't post; keys can't approve", async () => {
     const s = await signup();
+    await setupTestEnvironment(s);
     const bank = await account(s, "1030");
     const equity = await account(s, "3000");
     const entry = { date: new Date().toISOString().slice(0, 10), description: "Test", lines: [{ account_id: bank.id, debit: "1.00" }, { account_id: equity.id, credit: "1.00" }] };

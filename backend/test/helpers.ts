@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { appEnv } from "@zetra/config";
+import { withGlobal } from "@zetra/database";
 import type { FastifyInstance } from "fastify";
 import { buildServer } from "../src/server";
 
@@ -48,8 +49,21 @@ export async function signup(businessName = "Test Business"): Promise<Session> {
   return { cookie, orgId: response.data.organization_id, email };
 }
 
+export async function setupTestEnvironment(session: Session) {
+  const auth = { cookie: session.cookie };
+  // Wallet integration fixtures exercise NEAR Testnet, so assign these test users to the
+  // dedicated test environment before using the production-guarded workspace API.
+  await withGlobal(async (client) => {
+    const result = await client.query("UPDATE users SET default_environment = 'test' WHERE lower(email) = lower($1)", [session.email]);
+    if (result.rowCount !== 1) throw new Error("Could not assign the integration-test user to the test environment.");
+  });
+  const environmentResponse = await call("POST", "/v1/session/environment", auth, { environment: "test" });
+  if (environmentResponse.statusCode >= 300) throw new Error(`Test environment setup failed: ${environmentResponse.body}`);
+}
+
 export async function setupWorkspace(session: Session) {
   const auth = { cookie: session.cookie };
+  await setupTestEnvironment(session);
   const walletResponse = await call("POST", "/v1/wallets", auth, {
     name: "Main Receiving Wallet",
     network: "near:testnet",

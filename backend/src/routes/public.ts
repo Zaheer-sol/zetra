@@ -207,12 +207,12 @@ async function publicView(c: Client, invoiceId: string) {
   const payments = (
     await c.query(
       `SELECT p.*,
-              (p.invoice_id IS NULL AND p.status = 'needs_review' AND md.candidates @> jsonb_build_array(jsonb_build_object('invoiceId', $1))) AS review_candidate
+              (p.invoice_id IS NULL AND p.status = 'needs_review' AND md.candidates @> jsonb_build_array(jsonb_build_object('invoiceId', $1::text))) AS review_candidate
          FROM payments p LEFT JOIN match_decisions md ON md.id = p.latest_decision_id
         WHERE p.status <> 'reversed'
           AND (p.invoice_id = $1 OR (p.provisional_invoice_id = $1 AND p.status = 'confirming')
             OR (p.invoice_id IS NULL AND p.status = 'needs_review' AND EXISTS (SELECT 1 FROM exceptions e WHERE e.payment_id = p.id AND e.invoice_id = $1 AND e.status = 'open'))
-            OR (p.invoice_id IS NULL AND p.status = 'needs_review' AND md.candidates @> jsonb_build_array(jsonb_build_object('invoiceId', $1))))
+            OR (p.invoice_id IS NULL AND p.status = 'needs_review' AND md.candidates @> jsonb_build_array(jsonb_build_object('invoiceId', $1::text))))
         ORDER BY p.block_timestamp`,
       [invoiceId]
     )

@@ -66,3 +66,43 @@ describe("duplicate invoice payments", () => {
     expect(decision.explanation).toContain("predates the payment currently applied");
   });
 });
+
+describe("late invoice payments", () => {
+  const dueAt = new Date("2026-11-02T00:00:00.000Z");
+  const dueInvoice: InvoiceCandidate = { ...invoice, dueAt };
+
+  it("keeps a memo-referenced payment received after the due date in review", () => {
+    const decision = matchPayment({ ...payment, timestamp: new Date(dueAt.getTime() + 1) }, { ...context, invoices: [dueInvoice] });
+
+    expect(decision).toMatchObject({ outcome: "needs_review", invoiceId: null, exceptionType: "late_payment", appliedAmount: 0n });
+    expect(decision.explanation).toContain("past due");
+    expect(decision.candidates).toEqual([expect.objectContaining({ invoiceId: dueInvoice.id })]);
+  });
+
+  it("does not auto-match an exact-amount payment from an unknown sender after the due date", () => {
+    const decision = matchPayment(
+      { ...payment, invoiceReference: null, timestamp: new Date(dueAt.getTime() + 1) },
+      { ...context, invoices: [dueInvoice] }
+    );
+
+    expect(decision).toMatchObject({ outcome: "needs_review", invoiceId: null, exceptionType: "late_payment", appliedAmount: 0n });
+    expect(decision.candidates).toEqual([expect.objectContaining({ invoiceId: dueInvoice.id })]);
+  });
+
+  it("does not route an unreferenced receipt to a current invoice when the sender also has a plausible past-due invoice", () => {
+    const currentInvoice: InvoiceCandidate = { ...invoice, id: "invoice-current", number: "INV-CURRENT", dueAt: null };
+    const decision = matchPayment(
+      { ...payment, invoiceReference: null, timestamp: new Date(dueAt.getTime() + 1) },
+      { ...context, knownSender: { customerId: invoice.customerId, customerName: invoice.customerName }, invoices: [currentInvoice, dueInvoice] }
+    );
+
+    expect(decision).toMatchObject({ outcome: "needs_review", invoiceId: null, exceptionType: "late_payment", appliedAmount: 0n });
+    expect(decision.candidates.map((candidate) => candidate.invoiceId)).toEqual([dueInvoice.id, currentInvoice.id]);
+  });
+
+  it("still accepts a payment arriving exactly at the due-time cutoff", () => {
+    const decision = matchPayment({ ...payment, timestamp: dueAt }, { ...context, invoices: [dueInvoice] });
+
+    expect(decision).toMatchObject({ outcome: "matched", invoiceId: dueInvoice.id });
+  });
+});

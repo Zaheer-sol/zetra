@@ -14,6 +14,12 @@ const [{ appEnv }, { closePools, withGlobal }, { buildServer }] = await Promise.
 const DEMO_EMAIL = "demo@zetra.local";
 const DEMO_PASSWORD = "Zetra-Demo-2026!";
 const BUSINESS = "Zetra Demo Lab";
+const dueAt = (daysFromToday: number) => {
+  const date = new Date();
+  date.setUTCHours(23, 59, 59, 0);
+  date.setUTCDate(date.getUTCDate() + daysFromToday);
+  return date.toISOString();
+};
 const app = await buildServer({ logger: false });
 let cookie = "";
 
@@ -91,7 +97,7 @@ try {
       { description: "Brand strategy", quantity: 1, unit_amount: "900.00" },
       { description: "Website delivery", quantity: 1, unit_amount: "1500.00" }
     ],
-    due_at: "2026-11-10T23:59:59.000Z"
+    due_at: dueAt(14)
   });
   const second = await ensureInvoice({
     customer_id: nova.id,
@@ -103,7 +109,7 @@ try {
       { description: "Implementation", quantity: 1, unit_amount: "1800.00" },
       { description: "Operational handover", quantity: 1, unit_amount: "240.00" }
     ],
-    due_at: "2026-11-12T23:59:59.000Z"
+    due_at: dueAt(21)
   });
   await ensureInvoice({
     customer_id: nova.id,
@@ -112,7 +118,7 @@ try {
     title: "November advisory retainer",
     purpose: "Monthly product and operations advisory",
     amount: "1550.00",
-    due_at: "2026-11-15T23:59:59.000Z"
+    due_at: dueAt(7)
   });
 
   const payments = (await request("GET", "/v1/payments?limit=100")).data as any[];

@@ -7,11 +7,15 @@ that key is not stored in Zetra's database or source. Never configure a customer
 
 ## Tenancy
 
-- Every tenant table has `organization_id` and `environment`; every query filters by both.
+- Tenant-owned operational and financial records are scoped by organization; mode-specific records
+  also carry an environment. Network registries and published exchange rates are shared reference
+  data. Tenant-specific exchange rates are isolated from other workspaces.
 - PostgreSQL row-level security enforces the organization boundary underneath the application.
-  The API and worker connect as `zetra_app`, a non-superuser without `BYPASSRLS`; migrations run as
-  the schema owner. Tests assert the role's attributes and that an unfiltered query returns nothing.
-- Cross-tenant scans are limited to the worker's wallet list and webhook queue (`app.system = on`).
+  The API and worker use `zetra_app`, a non-superuser without `BYPASSRLS`; migrations run as the
+  schema owner. Integration tests verify the runtime role and tenant-specific rate isolation.
+- System-scoped transactions (`app.system = on`) are reserved for explicit token/id lookups that must
+  resolve a tenant before entering tenant scope and worker jobs that scan purpose-specific queues.
+  Treat each use of this scope as privileged.
 - Other organizations' objects return `404`, never `403`, so ids can't be probed.
 
 ## Authentication and authorization

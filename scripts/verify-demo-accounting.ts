@@ -47,9 +47,12 @@ try {
   check(payments.filter((payment: any) => payment.status === "matched").length === 2, "two settled simulated payments are matched once");
   check(payments.filter((payment: any) => payment.status === "needs_review" && payment.amount === "740.00").length === 1, "$740 of unidentified money is held for review");
 
-  const year = new Date().getUTCFullYear();
-  const from = `${year}-01-01`;
-  const to = `${year}-12-31`;
+  const firstIssuedDate = invoices
+    .map((invoice: any) => String(invoice.issued_at).slice(0, 10))
+    .sort()[0];
+  check(Boolean(firstIssuedDate), "demo invoices have valid issue dates");
+  const from = firstIssuedDate!;
+  const to = new Date().toISOString().slice(0, 10);
   const health = await request("/v1/accounting/health");
   const healthCheck = (key: string) => health.checks.find((item: any) => item.key === key);
   check(healthCheck("trial_balance")?.status === "ok", "total debits equal total credits");

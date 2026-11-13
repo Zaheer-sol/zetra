@@ -122,11 +122,11 @@ export function invoiceRoutes(app: FastifyInstance) {
         // though they must not be counted as invoice allocations until an operator resolves them.
         const payments = (await c.query(
           `SELECT p.*, md.exception_type AS related_exception_type,
-                  (p.invoice_id IS NULL AND p.status = 'needs_review' AND md.candidates @> jsonb_build_array(jsonb_build_object('invoiceId', $1))) AS review_candidate
+                  (p.invoice_id IS NULL AND p.status = 'needs_review' AND md.candidates @> jsonb_build_array(jsonb_build_object('invoiceId', $1::text))) AS review_candidate
              FROM payments p LEFT JOIN match_decisions md ON md.id = p.latest_decision_id
             WHERE p.invoice_id = $1 OR (p.provisional_invoice_id = $1 AND p.status = 'confirming')
                OR (p.invoice_id IS NULL AND p.status = 'needs_review' AND EXISTS (SELECT 1 FROM exceptions e WHERE e.payment_id = p.id AND e.invoice_id = $1 AND e.status = 'open'))
-               OR (p.invoice_id IS NULL AND p.status = 'needs_review' AND md.candidates @> jsonb_build_array(jsonb_build_object('invoiceId', $1)))
+               OR (p.invoice_id IS NULL AND p.status = 'needs_review' AND md.candidates @> jsonb_build_array(jsonb_build_object('invoiceId', $1::text)))
             ORDER BY p.block_timestamp DESC, p.id DESC`,
           [row.id]
         )).rows;

@@ -19,7 +19,7 @@ const SCENARIOS = [
   { key: "wrong_memo", title: "Wrong memo", desc: "A payment with an invalid reference; it cannot be silently matched.", needsInvoice: true },
   { key: "wrong_token", title: "Wrong token", desc: "A token the wallet doesn't accept. Recorded and held outside accounting.", needsInvoice: false },
   { key: "wrong_network", title: "Wrong network", desc: "A payment on a network different from the invoice. It stays in Needs review.", needsInvoice: false },
-  { key: "late", title: "Late payment", desc: "A valid payment received after the invoice due date.", needsInvoice: true },
+  { key: "late", title: "Late payment", desc: "A payment received after the invoice due date or payment-link expiry. It goes to review, not automatic matching.", needsInvoice: true },
   { key: "split", title: "Split payment", desc: "Two partial receipts run through the same matching and posting pipeline.", needsInvoice: true },
   { key: "refund", title: "Refund / reversal", desc: "A simulated payment followed by a compensating reversal.", needsInvoice: true },
   { key: "reorg", title: "Simulated reorg", desc: "Invalidates a simulated block and records compensating history.", needsInvoice: true },
@@ -82,11 +82,18 @@ export default function TestModePage() {
               ))}
             </ChoiceGroup>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Invoice" htmlFor="t-invoice" optional={!chosen.needsInvoice}>
+              <Field
+                label="Invoice"
+                htmlFor="t-invoice"
+                optional={!chosen.needsInvoice}
+                hint={scenario === "late" ? "Late-payment cases require an invoice with a due date or payment-link expiry." : undefined}
+              >
                 <Select id="t-invoice" value={invoiceId} onValueChange={setInvoiceId} required={chosen.needsInvoice} options={[
                   { value: "", label: chosen.needsInvoice ? "Choose an invoice…" : "None" },
                   ...(invoices?.data
-                    .filter((i) => (scenario === "duplicate" ? ["paid", "overpaid"].includes(i.status) : ["open", "partially_paid"].includes(i.status)))
+                    .filter((i) => scenario === "duplicate"
+                      ? ["paid", "overpaid"].includes(i.status)
+                      : ["open", "partially_paid"].includes(i.status) && (scenario !== "late" || i.due_at || i.expires_at))
                     .map((i) => ({ value: i.id, label: `${i.number} · ${i.customer.name} · ${money(i.amount_remaining)}` })) ?? [])
                 ]} />
               </Field>

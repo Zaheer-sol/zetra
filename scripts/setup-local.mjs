@@ -14,7 +14,33 @@ function run(command, args) {
 }
 
 function value(source, key) {
-  return source.match(new RegExp(`^${key}=(.*)$`, "m"))?.[1]?.trim() ?? "";
+  const raw = process.env[key]?.trim() || source.match(new RegExp(`^${key}=(.*)$`, "m"))?.[1]?.trim() || "";
+  return raw.replace(/^([\"'])(.*)\1$/, "$2");
+}
+
+function assertLocalDatabaseTargets(source) {
+  const expected = {
+    DATABASE_URL: "zetra",
+    MIGRATION_DATABASE_URL: "zetra",
+    TEST_DATABASE_URL: "zetra_test",
+    TEST_MIGRATION_DATABASE_URL: "zetra_test"
+  };
+  const localHosts = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+  for (const [key, expectedDatabase] of Object.entries(expected)) {
+    const configured = value(source, key);
+    if (!configured) throw new Error(`${key} must point to local PostgreSQL before setup can reset databases.`);
+    let url;
+    try {
+      url = new URL(configured);
+    } catch {
+      throw new Error(`${key} is not a valid PostgreSQL URL; refusing to run destructive local setup.`);
+    }
+    const database = decodeURIComponent(url.pathname.replace(/^\//, ""));
+    if (!new Set(["postgres:", "postgresql:"]).has(url.protocol) || !localHosts.has(url.hostname.toLowerCase()) || database !== expectedDatabase) {
+      throw new Error(`${key} must target local PostgreSQL database '${expectedDatabase}'; refusing to reset or seed another database.`);
+    }
+  }
 }
 
 async function finalTestnetHeight(rpcUrl) {
@@ -55,7 +81,9 @@ async function ensureLocalEnv() {
 }
 
 try {
+  if (process.env.NODE_ENV === "production") throw new Error("setup:local is disabled when NODE_ENV=production.");
   await ensureLocalEnv();
+  assertLocalDatabaseTargets(readFileSync(envPath, "utf8"));
   run("docker", ["compose", "up", "-d", "--wait", "postgres"]);
   run("npm", ["run", "db:reset"]);
   run("npm", ["run", "demo:seed"]);

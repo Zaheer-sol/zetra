@@ -11,11 +11,12 @@
  *   1. Asset must be approved for the receiving wallet.
  *   2. A NEAR transfer memo identifies the invoice outright.
  *   3. A known customer wallet narrows candidates to that customer's open invoices.
- *   4. For unknown senders, an exact remaining amount identifies a unique open invoice.
- *   5. Otherwise: an exception, with candidates explained.
+ *   4. Payments after an invoice due date or payment-link expiry are routed to review.
+ *   5. For unknown senders, an exact remaining amount identifies a unique open invoice.
+ *   6. Otherwise: an exception, with candidates explained.
  */
 
-export const MATCH_RULE_VERSION = "match-v1.2";
+export const MATCH_RULE_VERSION = "match-v1.3";
 
 /** Allowance for clock skew between invoice creation and block timestamps. */
 const ISSUE_GRACE_MS = 5 * 60 * 1000;
@@ -135,7 +136,16 @@ function isOpen(i: InvoiceCandidate) {
 }
 
 function isLateFor(i: InvoiceCandidate, at: Date) {
-  return i.status === "expired" || (i.expiresAt !== null && at.getTime() > i.expiresAt.getTime());
+  return i.status === "expired" ||
+    (i.dueAt !== null && at.getTime() > i.dueAt.getTime()) ||
+    (i.expiresAt !== null && at.getTime() > i.expiresAt.getTime());
+}
+
+function latenessReason(i: InvoiceCandidate, at: Date): string {
+  if (i.dueAt && at.getTime() > i.dueAt.getTime()) return `past due since ${day(i.dueAt)}`;
+  if (i.expiresAt && at.getTime() > i.expiresAt.getTime()) return `expired on ${day(i.expiresAt)}`;
+  if (i.status === "expired") return "expired";
+  return "no longer payable";
 }
 
 function inWindow(i: InvoiceCandidate, at: Date) {
@@ -222,7 +232,8 @@ export function matchPayment(payment: ObservedPayment, ctx: MatchContext): Match
       return review("late_payment", `${invoice.number} was cancelled before this payment arrived.`, [toCandidate(invoice, ["Payment reference", "Invoice cancelled"])], invoice.customerId);
     }
     if (isLateFor(invoice, payment.timestamp)) {
-      return review("late_payment", `${invoice.number} had expired before this payment arrived.`, [toCandidate(invoice, ["Payment reference", "Invoice expired"])], invoice.customerId);
+      const reason = latenessReason(invoice, payment.timestamp);
+      return review("late_payment", `${invoice.number} was ${reason} when this payment arrived.`, [toCandidate(invoice, ["Payment reference", reason])], invoice.customerId);
     }
     if (!inWindow(invoice, payment.timestamp)) {
       return review("unknown_payment", `${invoice.number} had not been issued when this payment arrived.`, [toCandidate(invoice, ["Payment reference", "Payment predates invoice"])], invoice.customerId);
@@ -236,6 +247,24 @@ export function matchPayment(payment: ObservedPayment, ctx: MatchContext): Match
     const sender = ctx.knownSender;
     checks.push({ code: "sender", passed: true, label: "Known customer wallet", detail: `${short(payment.fromAddress)} belongs to ${sender.customerName}` });
     const mine = eligible.filter((i) => i.customerId === sender.customerId).sort(byOldest);
+    const lateForSender = ctx.invoices.filter((i) =>
+      sameRail(i) &&
+      i.customerId === sender.customerId &&
+      (i.status === "expired" || i.status === "cancelled" || (isOpen(i) && isLateFor(i, payment.timestamp))) &&
+      remainingOf(i) > 0n &&
+      (payment.amount <= remainingOf(i) || payment.amount === i.amountDue)
+    );
+    if (mine.length && lateForSender.length) {
+      return review(
+        "late_payment",
+        `${sender.customerName} has both a current invoice and a past-due or closed invoice this payment could cover. Review the receipt before assigning it.`,
+        [
+          ...lateForSender.map((i) => toCandidate(i, ["Known customer wallet", closedReason(i, payment.timestamp)])),
+          ...mine.map((i) => toCandidate(i, ["Known customer wallet", "Current open invoice", `Remaining ${fmt(remainingOf(i), d)}`]))
+        ],
+        sender.customerId
+      );
+    }
     if (mine.length === 1) return apply(mine[0]!, `Only open invoice for ${sender.customerName}`);
     if (mine.length > 1) {
       const exact = mine.filter((i) => remainingOf(i) === payment.amount);
@@ -260,15 +289,12 @@ export function matchPayment(payment: ObservedPayment, ctx: MatchContext): Match
       );
     }
     // Known sender, no open invoice for them.
-    const lateAll = ctx.invoices.filter(
-      (i) => sameRail(i) && i.customerId === sender.customerId && (i.status === "expired" || i.status === "cancelled" || (isOpen(i) && isLateFor(i, payment.timestamp)))
-    );
-    if (lateAll.length) {
-      const cancelledOnly = lateAll.every((i) => i.status === "cancelled");
+    if (lateForSender.length) {
+      const cancelledOnly = lateForSender.every((i) => i.status === "cancelled");
       return review(
         "late_payment",
-        cancelledOnly ? `${sender.customerName} paid an invoice that had been cancelled.` : `${sender.customerName} paid after their invoice expired.`,
-        lateAll.map((i) => toCandidate(i, ["Known customer wallet", closedReason(i)])),
+        cancelledOnly ? `${sender.customerName} paid an invoice that had been cancelled.` : `${sender.customerName} sent a payment for an invoice that was ${latenessReason(lateForSender[0]!, payment.timestamp)}.`,
+        lateForSender.map((i) => toCandidate(i, ["Known customer wallet", closedReason(i, payment.timestamp)])),
         sender.customerId
       );
     }
@@ -297,15 +323,29 @@ export function matchPayment(payment: ObservedPayment, ctx: MatchContext): Match
     return review("ambiguous_match", `${exact.length} open invoices match this amount exactly, so Zetra won't pick one.`, exact.sort(byOldest).map((i) => toCandidate(i, ["Exact amount", "Within payment window"])));
   }
 
-  const lateExact = ctx.invoices.filter(
-    (i) => sameRail(i) && (i.status === "expired" || i.status === "cancelled" || (isOpen(i) && isLateFor(i, payment.timestamp))) && remainingOf(i) === payment.amount
-  );
-  if (lateExact.length) {
-    const cancelledOnly = lateExact.every((i) => i.status === "cancelled");
+  const lateCandidates = ctx.invoices
+    .filter((i) =>
+      sameRail(i) &&
+      (i.status === "expired" || i.status === "cancelled" || (isOpen(i) && isLateFor(i, payment.timestamp))) &&
+      remainingOf(i) > 0n &&
+      (payment.amount <= remainingOf(i) || payment.amount === i.amountDue)
+    )
+    .sort((a, b) => {
+      const aExact = remainingOf(a) === payment.amount ? 0 : 1;
+      const bExact = remainingOf(b) === payment.amount ? 0 : 1;
+      return aExact - bExact || byOldest(a, b);
+    });
+  if (lateCandidates.length) {
+    const cancelledOnly = lateCandidates.every((i) => i.status === "cancelled");
     return review(
       "late_payment",
-      cancelledOnly ? "The amount matches an invoice that was cancelled. Cancelled invoices never accept payment automatically." : "The amount matches an invoice that had already expired.",
-      lateExact.map((i) => toCandidate(i, ["Exact amount", closedReason(i)]))
+      cancelledOnly
+        ? "The payment may match an invoice that was cancelled. Cancelled invoices never accept payment automatically."
+        : `The payment arrived after an invoice was ${latenessReason(lateCandidates[0]!, payment.timestamp)}. Review it before assigning the funds.`,
+      lateCandidates.map((i) => toCandidate(i, [
+        remainingOf(i) === payment.amount ? "Exact remaining amount" : "Could fit this late invoice",
+        closedReason(i, payment.timestamp)
+      ]))
     );
   }
 
@@ -347,11 +387,15 @@ export function matchPayment(payment: ObservedPayment, ctx: MatchContext): Match
             : `${fmt(payment.amount, d)} received for ${fmt(remaining, d)} due, ${fmt(-after, d)} extra`
     });
     const windowOk = inWindow(invoice, payment.timestamp);
+    const deadlines = [
+      invoice.dueAt ? `due ${day(invoice.dueAt)}` : null,
+      invoice.expiresAt ? `payment link expires ${day(invoice.expiresAt)}` : null
+    ].filter((value): value is string => value !== null);
     checks.push({
       code: "window",
       passed: windowOk,
       label: windowOk ? "Valid payment window" : "Outside payment window",
-      detail: invoice.expiresAt ? `Issued ${day(invoice.issuedAt)}, payable until ${day(invoice.expiresAt)}` : `Issued ${day(invoice.issuedAt)}, no expiry`
+      detail: `Issued ${day(invoice.issuedAt)}; ${deadlines.length ? deadlines.join("; ") : "no due date or payment-link expiry"}`
     });
     checks.push({ code: "uniqueness", passed: true, label: "One deterministic candidate", detail: why });
     return {
@@ -374,9 +418,11 @@ export function matchPayment(payment: ObservedPayment, ctx: MatchContext): Match
   }
 }
 
-function closedReason(i: InvoiceCandidate): string {
+function closedReason(i: InvoiceCandidate, at: Date): string {
   if (i.status === "cancelled") return "Invoice cancelled";
-  return i.expiresAt ? `Expired ${day(i.expiresAt)}` : "Expired";
+  if (i.dueAt && at.getTime() > i.dueAt.getTime()) return `Past due ${day(i.dueAt)}`;
+  if (i.expiresAt && at.getTime() > i.expiresAt.getTime()) return `Expired ${day(i.expiresAt)}`;
+  return i.status === "expired" ? "Invoice expired" : "Payment window closed";
 }
 
 function recentlySettled(invoices: InvoiceCandidate[], payment: ObservedPayment, sameRail: (i: InvoiceCandidate) => boolean) {

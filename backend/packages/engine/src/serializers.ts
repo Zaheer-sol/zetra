@@ -166,20 +166,21 @@ export function serializeInvoice(row: Row, publicAppUrl: string, extra: { custom
 }
 
 /**
- * A payment's invoice context comes from its allocation, a provisional match, or one deterministic
- * review candidate. The latter is explicitly marked as review and never treated as applied.
+ * A payment's business purpose comes only from an allocation or a provisional match. A suggested
+ * invoice for a payment under review is exposed separately and never presented as established purpose.
  */
 export function paymentPurpose(row: Row, invoice?: Row | null) {
   const applied = row.invoice_id && invoice && invoice.id === row.invoice_id;
   const provisional = !row.invoice_id && row.status === "confirming" && row.provisional_invoice_id && invoice && invoice.id === row.provisional_invoice_id;
   const reviewCandidate = !row.invoice_id && row.status === "needs_review" && invoice && row.ctx_invoice_id === invoice.id;
   const object =
-    applied || provisional || reviewCandidate
+    applied || provisional
       ? { type: "invoice" as const, id: invoice!.id, number: invoice!.number ?? null, title: invoice!.title ?? null, purpose: invoice!.purpose ?? null }
       : null;
   return {
     business_object: object,
-    purpose_status: applied ? ("known" as const) : provisional ? ("provisional" as const) : reviewCandidate ? ("review" as const) : ("unknown" as const),
+    suggested_object: reviewCandidate ? { type: "invoice" as const, id: invoice!.id, number: invoice!.number ?? null, title: invoice!.title ?? null, purpose: invoice!.purpose ?? null } : null,
+    purpose_status: applied ? ("known" as const) : provisional ? ("provisional" as const) : ("unknown" as const),
     context_source: applied ? ((row.context_source as string | null) ?? null) : null
   };
 }

@@ -363,7 +363,6 @@ export function reportingRoutes(app: FastifyInstance) {
           await c.query(
             `SELECT ${PAYMENT_COLUMNS}, w.address AS wallet_address, md.rule_version
                ${PAYMENT_FROM}
-               LEFT JOIN match_decisions md ON md.id = p.latest_decision_id
               WHERE ${where} ORDER BY p.block_timestamp, p.id LIMIT 50000`,
             params
           )

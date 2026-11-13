@@ -85,7 +85,7 @@ describe("reconciliation stress scenarios", () => {
     const unknown = await run("unknown_sender", { amount: "7.40" });
     expect((await payment(unknown.payment_id)).status).toBe("needs_review");
 
-    const lateInvoice = await invoice("15.00", { expires_at: new Date(Date.now() + 60_000).toISOString() });
+    const lateInvoice = await invoice("15.00", { due_at: new Date(Date.now() + 60_000).toISOString() });
     const late = await run("late", { invoice_id: lateInvoice.id });
     expect((await payment(late.payment_id)).status).toBe("needs_review");
 

@@ -82,7 +82,7 @@ export function developerRoutes(app: FastifyInstance) {
         ["wrong_memo", "Wrong memo", "Payment evidence with an invalid reference."],
         ["wrong_token", "Wrong token", "Unsupported token is held outside accounting."],
         ["unknown_sender", "Unknown sender", "Payment from an unregistered wallet."],
-        ["late", "Late payment", "Valid payment received after the due date."],
+        ["late", "Late payment", "Payment received after an invoice due date or payment-link expiry; sent to review."],
         ["split", "Split payment", "Two partial receipts settle one invoice."],
         ["refund", "Refund/reversal", "Simulated payment followed by a compensating reversal."],
         ["reorg", "Reorg/reversal", "Simulated block reorganization compensation."],

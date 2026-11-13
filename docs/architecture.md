@@ -59,8 +59,9 @@ See [accounting rules](accounting.md) for the complete postings and report tie-o
 - **No silent edit of history:** posted journals, observations, payments, allocations, decisions,
   events and audit records are protected by append-only database triggers. Corrections use reversing
   entries and explicit resolutions.
-- **No cross-tenant reads:** tenant tables carry organization and environment keys; PostgreSQL row-
-  level security is applied beneath the API.
+- **Tenant isolation:** tenant-owned records carry an organization key and, where needed, an
+  environment key. PostgreSQL row-level security protects them beneath the API; shared registries
+  and published reference rates are intentionally readable across workspaces.
 - **No advance past failed ingestion:** the worker cursor advances only after a block has been
   processed successfully and stored.
 - **No unsafe automatic match:** ambiguity, wrong amounts, unknown senders and unsupported tokens

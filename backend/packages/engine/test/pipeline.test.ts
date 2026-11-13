@@ -34,11 +34,11 @@ describe("exact payment: observe → confirm → match", () => {
     expect(await events(ws, p.id)).toEqual(["PAYMENT_OBSERVED", "PAYMENT_MATCHED"]);
 
     const [decision] = await q(ws, "SELECT * FROM match_decisions WHERE payment_id = $1 AND stage = 'final'", [p.id]);
-    expect(decision.rule_version).toBe("match-v1.1");
+    expect(decision.rule_version).toBe("match-v1.3");
     expect(decision.checks.map((c: { code: string }) => c.code)).toEqual(expect.arrayContaining(["receiving_wallet", "asset", "amount", "window", "uniqueness"]));
     const [event] = await q(ws, "SELECT data FROM financial_events WHERE payment_id = $1 AND type = 'PAYMENT_MATCHED'", [p.id]);
     expect(event.data.evidence.block_hash).toBe(obs.blockHash);
-    expect(event.data.evidence.rule_version).toBe("match-v1.1");
+    expect(event.data.evidence.rule_version).toBe("match-v1.3");
     expect(event.data.invoice.number).toBe("INV-2041");
     expect(event.data.payment.amount).toBe("2000.00");
   });
