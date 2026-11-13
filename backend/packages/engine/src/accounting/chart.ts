@@ -23,6 +23,7 @@ export type SystemKey =
   | "cogs"
   | "general_expense"
   | "network_fees"
+  | "token_storage_fees"
   | "bad_debt"
   | "opening_balance_equity"
   | "fx_gain_loss"
@@ -67,6 +68,7 @@ export const DEFAULT_CHART: Seed[] = [
   { code: "6020", name: "Software", type: "expense", subtype: "expense", normal: "debit" },
   { code: "6030", name: "Marketing", type: "expense", subtype: "expense", normal: "debit" },
   { code: "6040", name: "Network Fees", type: "expense", subtype: "expense", normal: "debit", key: "network_fees", description: "Blockchain gas and network fees." },
+  { code: "6090", name: "Token Account Setup", type: "expense", subtype: "expense", normal: "debit", key: "token_storage_fees", description: "NEP-141 storage deposits paid to activate vendor token accounts." },
   { code: "6050", name: "Payment & Bank Fees", type: "expense", subtype: "expense", normal: "debit" },
   { code: "6060", name: "Professional Services", type: "expense", subtype: "expense", normal: "debit" },
   { code: "6070", name: "Office & Admin", type: "expense", subtype: "expense", normal: "debit" },

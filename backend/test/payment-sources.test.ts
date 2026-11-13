@@ -72,9 +72,27 @@ describe("canonical payment sources", () => {
     const payment = (await call("GET", `/v1/payments/${posted.json().payment_id}`, { key })).data;
     expect(payment.status).toBe("matched");
     expect(payment.invoice.id).toBe(invoice.id);
+    const redirectedRefund = await call("POST", "/v1/payouts", auth(s), {
+      kind: "refund", wallet_id: wallet.id, recipient: "attacker.testnet", amount: "1.00", asset: "USDC",
+      payment_id: payment.id, idempotency_key: "refund-redirect-0001"
+    });
+    expect(redirectedRefund.statusCode).toBe(422);
+    expect(redirectedRefund.data.error.code).toBe("refund_recipient_mismatch");
     const refund = await call("POST", `/v1/payments/${posted.json().payment_id}/refund`, auth(s), { amount: "7.00", idempotency_key: "refund-test-0001" });
     expect(refund.statusCode).toBe(201);
     expect(refund.data.status).toBe("pending_approval");
+    const submittedHash = "B".repeat(44);
+    const submittedRefund = await call("POST", `/v1/payouts/${refund.data.id}/submit`, auth(s), { transaction_hash: submittedHash });
+    expect(submittedRefund.statusCode).toBe(200);
+    expect(submittedRefund.data).toMatchObject({ id: refund.data.id, kind: "refund", status: "submitted", tx_hash: submittedHash });
+    const submittedRetry = await call("POST", `/v1/payouts/${refund.data.id}/submit`, auth(s), { transaction_hash: submittedHash });
+    expect(submittedRetry.statusCode).toBe(200);
+    expect(submittedRetry.data.status).toBe("submitted");
+    const conflictingHash = await call("POST", `/v1/payouts/${refund.data.id}/submit`, auth(s), { transaction_hash: "C".repeat(44) });
+    expect(conflictingHash.statusCode).toBe(409);
+    const autoApprove = await call("POST", `/v1/payouts/${refund.data.id}/approve`, auth(s), {});
+    expect(autoApprove.statusCode).toBe(409);
+    expect(autoApprove.data.error.code).toBe("refund_wallet_signature_required");
     const excessiveRefund = await call("POST", `/v1/payments/${posted.json().payment_id}/refund`, auth(s), { amount: "6.00", idempotency_key: "refund-test-0002" });
     expect(excessiveRefund.statusCode).toBe(422);
     expect(excessiveRefund.data.error.code).toBe("refund_too_large");

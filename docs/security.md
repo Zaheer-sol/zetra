@@ -1,6 +1,9 @@
 # Security
 
-Zetra handles payment records, not money. It never holds funds, private keys or signing authority.
+Zetra never takes custody of customer funds. Incoming payments and the supported refund/vendor
+transfer flows are signed in payer or business-controlled wallets. An optional, explicitly configured
+worker payout path can use a business-controlled signer key loaded from the deployment secret manager;
+that key is not stored in Zetra's database or source. Never configure a customer or payer key there.
 
 ## Tenancy
 
@@ -65,4 +68,4 @@ after the NEAR RPC returns it; local simulations cannot populate those fields.
 
 ## Smart contract
 
-See `docs/smart-contract.md`. Not audited.
+See [the attestation deployment guide](docs/attestation-deployment.md). The books-attestation contract has not been externally audited.

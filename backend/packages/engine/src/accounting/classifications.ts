@@ -27,6 +27,10 @@ export async function classifyTransaction(
   const p = (await client.query("SELECT * FROM payments WHERE id = $1 AND organization_id = $2 AND environment = $3 FOR UPDATE", [input.payment_id, organizationId, environment])).rows[0] as Row | undefined;
   if (!p) throw new EngineError("not_found", "No such payment.", 404);
   if (!["needs_review", "dismissed"].includes(p.status)) throw new EngineError("payment_not_unidentified", "Only payments that aren't applied to an invoice can be classified. Applied payments are already accounted for.", 409);
+  if ((await client.query(
+    "SELECT 1 FROM payout_requests WHERE organization_id = $1 AND environment = $2 AND payment_id = $3 AND kind = 'refund' AND status = ANY($4) LIMIT 1",
+    [organizationId, environment, p.id, ["pending_approval", "approved", "submitting", "submitted", "confirmed"]]
+  )).rows[0]) throw new EngineError("payment_refund_pending", "This payment has a refund request. Finish or cancel the refund before changing its accounting classification.", 409);
   if (!p.asset_id) throw new EngineError("unsupported_token", "This payment isn't in a supported stablecoin, so it has no accounting value.", 422);
   const receipt = (await client.query("SELECT l.account_id FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id WHERE e.organization_id = $1 AND e.environment = $2 AND e.source_key = $3 AND l.credit > 0 LIMIT 1", [organizationId, environment, `pay-receipt:${p.id}`])).rows[0] as Row | undefined;
   if (!receipt) throw new EngineError("not_in_books", "This payment isn't in the books yet (it may still be confirming).", 409);

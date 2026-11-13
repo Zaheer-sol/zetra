@@ -35,6 +35,7 @@ function Onboarding() {
   const [keys] = useState(() => ({ wallet: newIdempotencyKey(), invoice: newIdempotencyKey() }));
   const errs = fieldErrors(error);
   const selectedNetwork = networkOptions?.data.find((network) => network.key === wallet.network);
+  const collectionAvailable = Boolean(selectedNetwork?.assets.length);
   const addressValid = NEAR_ACCOUNT.test(wallet.address.trim());
   const customerAddressValid = NEAR_ACCOUNT.test(customer.address.trim());
   const invoiceAsset = selectedNetwork?.assets.includes("USDC") ? "USDC" : selectedNetwork?.assets[0] ?? "USDC";
@@ -161,6 +162,7 @@ function Onboarding() {
                       });
                     if (setup === "books") await finishBooks();
                     else if (setup === "connect") await finishConnect();
+                    else if (!collectionAvailable) await finishBooks();
                     else setStep(2);
                   });
                 }}
@@ -189,9 +191,9 @@ function Onboarding() {
                       <Chain network={wallet.network} name={selectedNetwork.name} />
                       <span className="text-muted-foreground text-sm">· {selectedNetwork.assets.join(", ")}</span>
                     </>
-                  ) : <span className="text-sm text-muted-foreground">No test networks are enabled.</span>}
+                  ) : <span className="text-sm text-muted-foreground">{networkOptions ? "No test networks are enabled." : "Checking configured networks…"}</span>}
                 </div>
-                {setup === "collect" && !selectedNetwork?.assets.length && (
+                {setup === "collect" && !collectionAvailable && networkOptions && (
                   <Alert tone="warning">Payment collection is not enabled on this deployment yet. Open your books now, then add a receiving wallet after a NEAR network is configured.</Alert>
                 )}
                 {networkOptions && networkOptions.data.length > 1 && (
@@ -203,8 +205,8 @@ function Onboarding() {
                   label="Public wallet address"
                   htmlFor="ob-address"
                   error={errs.address ?? (wallet.address && !addressValid ? "Enter a valid NEAR account ID." : null)}
-                  optional={setup !== "collect"}
-                  hint={setup === "collect" ? "The wallet your customers pay. Paste the public address or account ID only. Zetra never asks for a private key or seed phrase." : "You can add it later. Zetra only sees payments to wallets you've added. Paste the public address or account ID only."}
+                  optional={setup !== "collect" || !collectionAvailable}
+                  hint={setup === "collect" && collectionAvailable ? "The wallet your customers pay. Paste the public address or account ID only. Zetra never asks for a private key or seed phrase." : "You can add it later. Zetra only sees payments to wallets you've added. Paste the public address or account ID only."}
                 >
                   <Input
                     id="ob-address"
@@ -213,15 +215,26 @@ function Onboarding() {
                     onChange={(e) => setWallet((w) => ({ ...w, address: e.target.value }))}
                     placeholder="account.near"
                     spellCheck={false}
-                    required={setup === "collect"}
+                    required={setup === "collect" && collectionAvailable}
                   />
                 </Field>
                 <Field label="Name" htmlFor="ob-wname">
                   <Input id="ob-wname" value={wallet.name} onChange={(e) => setWallet((w) => ({ ...w, name: e.target.value }))} />
                 </Field>
                 <Alert tone="neutral">This is a new business workspace with its own books. It starts in Live mode; the Zetra Demo sample data stays in the separate demo account.</Alert>
-                <Button type="submit" variant="primary" size="lg" loading={busy} disabled={setup === "collect" && (!selectedNetwork?.assets.length || !wallet.address.trim() || !addressValid)}>
-                  {setup === "books" ? "Open my books" : setup === "connect" ? "Connect my store" : "Continue to payment setup"}
+                <p className="text-sm text-muted-foreground" aria-live="polite">
+                  {setup === "books"
+                    ? "Next: open your new business books. The Zetra Demo sample workspace stays separate."
+                    : setup === "connect"
+                      ? "Next: open the developer setup for your store or checkout."
+                      : collectionAvailable
+                        ? "Next: add a customer and create a hosted NEAR USDC payment request."
+                        : networkOptions
+                          ? "Next: open your books. You can connect a wallet after NEAR testnet collection is enabled."
+                          : "Loading the payment network options."}
+                </p>
+                <Button type="submit" variant="primary" size="lg" loading={busy} disabled={setup === "collect" && (!networkOptions || (collectionAvailable && (!wallet.address.trim() || !addressValid)))}>
+                  {setup === "books" || (setup === "collect" && !collectionAvailable) ? "Open my books" : setup === "connect" ? "Connect my store" : "Continue to payment setup"}
                 </Button>
               </form>
             )}

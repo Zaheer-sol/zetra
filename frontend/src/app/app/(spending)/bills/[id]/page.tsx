@@ -9,6 +9,7 @@ import { Badge, BigMoney, Button, Card, ErrorState, KV, PageHeader, SkeletonBloc
 import { BILL_LABEL, BILL_TONE, EntryStatus, FinancialsGate, ReasonModal, TxProof, calendarDate, useAction } from "@/components/ledger-components";
 import { useSession } from "@/components/session";
 import { PayBillModal } from "@/components/payables-components";
+import { NearBillPayment } from "./near-bill-payment";
 import { api, useApi } from "@/lib/api";
 import { money } from "@/lib/format";
 
@@ -56,6 +57,7 @@ function BillView() {
       />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px] [&>*]:min-w-0">
         <div className="grid gap-6 [&>*]:min-w-0">
+          {payable && <NearBillPayment bill={b} onPaid={() => mutate()} />}
           <Card title="Payments">
             {b.payments.length === 0 ? (
               <p className="px-6 py-5 text-sm text-muted-foreground max-md:px-4">{b.status === "draft" ? "Approve the bill before paying it." : b.status === "void" ? "This bill was voided." : "No payments yet."}</p>

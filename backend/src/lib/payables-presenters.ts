@@ -63,7 +63,7 @@ export async function billDetail(c: Client, organizationId: string, environment:
   const entries = (await c.query("SELECT * FROM journal_entries WHERE organization_id = $1 AND environment = $2 AND (source_id = $3 OR source_id = ANY($4)) ORDER BY number", [organizationId, environment, id, payments.map((p) => p.id)])).rows as Row[];
   return {
     ...serializeBill(b),
-    payments: payments.map((p) => ({ id: p.id, amount: money(BigInt(p.amount)), paid_on: p.paid_on, reference: p.reference, paid_from: p.account_code ? { id: p.paid_from_account_id, code: p.account_code, name: p.account_name } : null, by: p.actor_label, created_at: p.created_at })),
+    payments: payments.map((p) => ({ id: p.id, amount: money(BigInt(p.amount)), method: p.method, transaction_hash: p.method === "onchain" ? p.reference : null, paid_on: p.paid_on, reference: p.reference, paid_from: p.account_code ? { id: p.paid_from_account_id, code: p.account_code, name: p.account_name } : null, by: p.actor_label, created_at: p.created_at })),
     journal_entries: entries.map(serializeEntryRow)
   };
 }

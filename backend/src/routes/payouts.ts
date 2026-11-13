@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { cancelPayout, approvePayout, confirmWalletSignedRefund, createPayoutRequest, createRefundRequest, serializePayout } from "@zetra/engine";
-import { createPayoutInput, payoutActionInput, payoutListQuery, refundInput, refundWalletConfirmationInput } from "@zetra/schemas";
+import { cancelPayout, approvePayout, confirmWalletSignedRefund, confirmWalletSignedVendorPayout, createPayoutRequest, createRefundRequest, preflightVendorPayout, serializePayout, submitWalletSignedPayout } from "@zetra/engine";
+import { createPayoutInput, payoutActionInput, payoutListQuery, refundInput, refundWalletConfirmationInput, payoutWalletSubmissionInput, vendorPayoutPreflightInput } from "@zetra/schemas";
 import { idParam, route } from "../lib/route";
 
 export function payoutRoutes(app: FastifyInstance) {
@@ -13,10 +13,11 @@ export function payoutRoutes(app: FastifyInstance) {
     query: payoutListQuery,
     handler: async ({ query, tx, organizationId, environment }) => tx(async (c) => {
       const params: unknown[] = [organizationId, environment];
-      const status = query.status ? " AND status = $3" : "";
-      if (query.status) params.push(query.status);
+      const filters: string[] = [];
+      if (query.status) { params.push(query.status); filters.push(`status = $${params.length}`); }
+      if (query.bill_id) { params.push(query.bill_id); filters.push(`bill_id = $${params.length}`); }
       params.push(query.limit);
-      const rows = (await c.query(`SELECT * FROM payout_requests WHERE organization_id = $1 AND environment = $2${status} ORDER BY requested_at DESC LIMIT $${params.length}`, params)).rows;
+      const rows = (await c.query(`SELECT * FROM payout_requests WHERE organization_id = $1 AND environment = $2${filters.map((filter) => ` AND ${filter}`).join("")} ORDER BY requested_at DESC LIMIT $${params.length}`, params)).rows;
       return { data: rows.map(serializePayout) };
     })
   });
@@ -40,11 +41,22 @@ export function payoutRoutes(app: FastifyInstance) {
         paymentId: body.payment_id,
         invoiceId: body.invoice_id,
         vendorId: body.vendor_id,
+        billId: body.bill_id,
         idempotencyKey: body.idempotency_key
       }, actor);
       reply.code(201);
       return serializePayout(row);
     })
+  });
+
+  route(app, {
+    method: "POST",
+    url: "/v1/payouts/vendor-preflight",
+    summary: "Check a wallet-signed NEAR vendor bill payment before signing",
+    tags: ["payouts"],
+    permission: "financials:approve",
+    body: vendorPayoutPreflightInput,
+    handler: async ({ body, tx, organizationId, environment }) => tx((c) => preflightVendorPayout(c, organizationId, environment, body))
   });
 
   route(app, {
@@ -87,15 +99,31 @@ export function payoutRoutes(app: FastifyInstance) {
 
   route(app, {
     method: "POST",
+    url: "/v1/payouts/:id/submit",
+    summary: "Persist a wallet-submitted NEAR refund or vendor transaction before finality verification",
+    tags: ["payouts"],
+    permission: "financials:approve",
+    idempotent: true,
+    params: idParam,
+    body: payoutWalletSubmissionInput,
+    handler: async ({ params, body, tx, organizationId, environment, actor }) => tx(async (c) =>
+      serializePayout(await submitWalletSignedPayout(c, organizationId, environment, params.id, body.transaction_hash, actor))
+    )
+  });
+
+  route(app, {
+    method: "POST",
     url: "/v1/payouts/:id/confirm-wallet",
-    summary: "Verify and record a finalized refund signed by the business NEAR wallet",
+    summary: "Verify and record a finalized wallet-signed NEAR refund or vendor payment",
     tags: ["payouts"],
     permission: "financials:approve",
     idempotent: true,
     params: idParam,
     body: refundWalletConfirmationInput,
-    handler: async ({ params, body, tx, organizationId, environment, actor }) => tx(async (c) =>
-      serializePayout(await confirmWalletSignedRefund(c, organizationId, environment, params.id, body.transaction_hash, actor))
-    )
+    handler: async ({ params, body, tx, organizationId, environment, actor }) => tx(async (c) => {
+      const payout = (await c.query("SELECT kind FROM payout_requests WHERE id = $1 AND organization_id = $2 AND environment = $3", [params.id, organizationId, environment])).rows[0] as { kind?: string } | undefined;
+      if (payout?.kind === "vendor") return serializePayout(await confirmWalletSignedVendorPayout(c, organizationId, environment, params.id, body.transaction_hash, actor));
+      return serializePayout(await confirmWalletSignedRefund(c, organizationId, environment, params.id, body.transaction_hash, actor));
+    })
   });
 }

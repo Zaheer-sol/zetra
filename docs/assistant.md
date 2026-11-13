@@ -5,8 +5,10 @@ receive business-ready confirmations when the money arrives.
 
 The assistant lives inside the console (**Zeti** in the sidebar, or **Ask Zeti** / ⌘K from any
 page). It is an interface, not a second system: every answer and every action goes through Zetra's
-regular API as the signed-in user, so it sees exactly what that user can see, in the mode (test or
-live) the console is in, and every change it makes is validated, idempotent and audited like any other.
+regular API as the signed-in user, so it sees exactly what that user can see in the active workspace
+and its configured environment. Demo records remain in the separate seeded demo workspace; new
+business workspaces start with their own books. Every change is validated, idempotent and audited like
+any other.
 
 ```
 message → parser (typed intent) → orchestrator → Zetra API (in-process, as the user)

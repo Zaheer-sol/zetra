@@ -17,6 +17,7 @@ interface NearPay {
 }
 
 type Stage = { kind: "idle" } | { kind: "working"; label: string } | { kind: "submitted"; hash: string; amountBaseUnits: string; verification: "verified" | "pending" | "mismatch"; message: string } | { kind: "error"; message: string };
+type SavedSubmission = { version: 1; payer_account_id: string; transaction_hash: string };
 interface Preflight {
   network: string;
   token_contract: string;
@@ -48,14 +49,42 @@ function failedExecution(outcome: unknown): boolean {
   });
 }
 
+function recoveryKey(token: string) {
+  return `zetra:near-payment:v1:${token}`;
+}
+
+function readSubmission(token: string): SavedSubmission | null {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(recoveryKey(token)) ?? "null") as SavedSubmission | null;
+    return saved?.version === 1 && typeof saved.payer_account_id === "string" && /^[1-9A-HJ-NP-Za-km-z]{40,50}$/.test(saved.transaction_hash) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSubmission(token: string, payer: string, hash: string) {
+  try { window.localStorage.setItem(recoveryKey(token), JSON.stringify({ version: 1, payer_account_id: payer, transaction_hash: hash } satisfies SavedSubmission)); } catch { /* The payer can still paste the hash from wallet history. */ }
+}
+
+function pause(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: NearPay; token: string; onSubmitted: () => void }) {
   const [connector, setConnector] = useState<NearConnector | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [preflight, setPreflight] = useState<Preflight | null>(null);
   const [existingHash, setExistingHash] = useState("");
+  const [savedSubmission, setSavedSubmission] = useState<SavedSubmission | null>(null);
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
   const busy = stage.kind === "working";
   const network = pay.network.testnet ? "testnet" : "mainnet";
+
+  useEffect(() => {
+    const saved = readSubmission(token);
+    setSavedSubmission(saved);
+    if (saved) setExistingHash(saved.transaction_hash);
+  }, [token]);
 
   useEffect(() => {
     // After a verified partial payment, the hosted page changes to the new remaining amount.
@@ -80,26 +109,35 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
     return result;
   };
 
-  const verifySubmitted = async (hash: string) => {
+  const verifySubmitted = async (hash: string, payer = accountId): Promise<"verified" | "pending" | "mismatch"> => {
+    if (!payer) {
+      setStage({ kind: "submitted", hash, amountBaseUnits: pay.amount_base_units, verification: "pending", message: "Reconnect the payer wallet used for this transfer before Zetra can verify it. Do not send a second payment." });
+      return "pending";
+    }
     setStage({ kind: "working", label: "Verifying the finalized NEAR transfer…" });
     try {
       const response = await fetch(`/api/v1/public/payment-requests/${encodeURIComponent(token)}/verify`, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ payer_account_id: accountId, transaction_hash: hash }),
+        body: JSON.stringify({ payer_account_id: payer, transaction_hash: hash }),
         cache: "no-store"
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
+        const definitive = response.status === 400 || response.status === 404 || response.status === 422;
+        if (definitive) {
+          try { window.localStorage.removeItem(recoveryKey(token)); } catch { /* Ignore storage restrictions. */ }
+          setSavedSubmission(null);
+        }
         setStage({
           kind: "submitted",
           hash,
           amountBaseUnits: pay.amount_base_units,
-          verification: response.status >= 500 || response.status === 429 ? "pending" : "mismatch",
+          verification: definitive ? "mismatch" : "pending",
           message: data?.error?.message ?? "Zetra could not verify this transaction yet."
         });
         onSubmitted();
-        return;
+        return definitive ? "mismatch" : "pending";
       }
       const state = data?.verification?.invoice_state as string | undefined;
       const paymentStatuses = (data?.verification?.payment_statuses ?? []) as string[];
@@ -113,7 +151,10 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
           ? "Transfer verified and applied. The invoice now shows its remaining balance."
           : "Transfer verified on NEAR, but it did not settle this invoice automatically. The business may need to review the payment.";
       setStage({ kind: "submitted", hash, amountBaseUnits: pay.amount_base_units, verification: "verified", message });
+      try { window.localStorage.removeItem(recoveryKey(token)); } catch { /* Ignore storage restrictions. */ }
+      setSavedSubmission(null);
       onSubmitted();
+      return "verified";
     } catch {
       setStage({
         kind: "submitted",
@@ -123,6 +164,16 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
         message: "NEAR verification is temporarily unavailable. Keep this page open and check again. Do not send a second payment."
       });
       onSubmitted();
+      return "pending";
+    }
+  };
+
+  const verifyWithRetries = async (hash: string, payer = accountId) => {
+    if (!payer) return;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const result = await verifySubmitted(hash, payer);
+      if (result !== "pending" || attempt === 4) return;
+      await pause(1_250);
     }
   };
 
@@ -140,11 +191,24 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
       const accounts = await wallet.getAccounts({ network });
       const account = accounts[0]?.accountId;
       if (!account) throw new Error("The wallet did not share an account. Unlock it and try again.");
+      const saved = readSubmission(token);
+      if (saved && saved.payer_account_id.toLowerCase() !== account.toLowerCase()) {
+        setSavedSubmission(saved);
+        setExistingHash(saved.transaction_hash);
+        throw new Error(`A payment from ${saved.payer_account_id} is still being verified. Connect that same payer wallet to recover it; do not send another payment.`);
+      }
       setConnector(next);
       setAccountId(account);
-      setStage({ kind: "working", label: "Checking testnet USDC and NEAR balances…" });
-      await checkReadiness(account);
-      setStage({ kind: "idle" });
+      if (saved) {
+        setSavedSubmission(saved);
+        setExistingHash(saved.transaction_hash);
+        saveSubmission(token, account, saved.transaction_hash);
+        await verifyWithRetries(saved.transaction_hash, account);
+      } else {
+        setStage({ kind: "working", label: "Checking testnet USDC and NEAR balances…" });
+        await checkReadiness(account);
+        setStage({ kind: "idle" });
+      }
     } catch (error) {
       setStage({ kind: "error", message: (error as Error).message || "The wallet connection was not completed." });
     }
@@ -195,8 +259,11 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
         ? outcome.transaction.hash
         : null;
       if (!transactionHash) throw new Error("NEAR did not return a transaction hash. Check your wallet before retrying.");
+      saveSubmission(token, accountId, transactionHash);
+      setSavedSubmission({ version: 1, payer_account_id: accountId, transaction_hash: transactionHash });
+      setExistingHash(transactionHash);
       onSubmitted();
-      await verifySubmitted(transactionHash);
+      await verifyWithRetries(transactionHash, accountId);
     } catch (error) {
       setStage({ kind: "error", message: (error as Error).message || "The transfer was not completed." });
     }
@@ -236,7 +303,7 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
           {stage.kind !== "submitted" && (
             <details className="rounded-xl border px-3 py-2.5 text-sm">
               <summary className="cursor-pointer font-medium">Already sent USDC? Verify the transaction</summary>
-              <form className="mt-3 grid gap-2" onSubmit={(event) => { event.preventDefault(); if (existingHash.trim()) void verifySubmitted(existingHash.trim()); }}>
+              <form className="mt-3 grid gap-2" onSubmit={(event) => { event.preventDefault(); if (existingHash.trim()) { saveSubmission(token, accountId, existingHash.trim()); void verifyWithRetries(existingHash.trim(), accountId); } }}>
                 <label className="text-xs text-muted-foreground" htmlFor="existing-near-tx">Final NEAR transaction hash</label>
                 <input
                   id="existing-near-tx"
@@ -261,6 +328,11 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
           {busy ? stage.label : "Connect NEAR wallet"}
         </Button>
       )}
+      {savedSubmission && stage.kind !== "submitted" && stage.kind !== "working" && (
+        <p className="rounded-xl bg-warning/10 px-3 py-2.5 text-sm text-warning" role="status">
+          A submitted payment from <span className="font-mono">{shortAddress(savedSubmission.payer_account_id)}</span> is saved in this browser. Reconnect that payer wallet to resume verification; do not pay again.
+        </p>
+      )}
       {stage.kind === "submitted" && (
         <div className="grid gap-2 rounded-xl bg-muted/50 px-3 py-2.5 text-sm" role="status">
           <p className={stage.verification === "verified" ? "text-foreground" : stage.verification === "pending" ? "text-warning" : "text-destructive"}>
@@ -269,7 +341,7 @@ export default function NearWalletCheckout({ pay, token, onSubmitted }: { pay: N
           </p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {pay.network.explorer_url && <a className="font-medium text-primary hover:underline" href={`${pay.network.explorer_url}/txns/${stage.hash}`} target="_blank" rel="noreferrer noopener">View transaction</a>}
-            {stage.verification === "pending" && <Button type="button" variant="ghost" size="sm" className="h-auto px-1 py-0.5 text-xs" onClick={() => void verifySubmitted(stage.hash)}>Check confirmation again</Button>}
+            {stage.verification === "pending" && <Button type="button" variant="ghost" size="sm" className="h-auto px-1 py-0.5 text-xs" onClick={() => void verifyWithRetries(stage.hash)}>Check confirmation again</Button>}
             {stage.verification === "mismatch" && <Button type="button" variant="ghost" size="sm" className="h-auto px-1 py-0.5 text-xs" onClick={() => setStage({ kind: "idle" })}>Return to payment options</Button>}
           </div>
         </div>

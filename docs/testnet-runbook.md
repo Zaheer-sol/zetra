@@ -36,21 +36,33 @@ must not be represented as complete until every verification below passes.
 - Accounts Receivable agrees with remaining invoices.
 - Trial balance and balance sheet remain balanced; cash flow reconciles.
 
-## Prove an outgoing payout/refund
+## Prove a wallet-signed vendor payment/refund
 
-1. Use a dedicated low-balance signer account whose address exactly matches the Zetra payout wallet.
-2. Provide `NEAR_TESTNET_PAYOUT_SIGNER_ID` and `NEAR_TESTNET_PAYOUT_PRIVATE_KEY` through the runtime
-   secret manager only; never commit them or send them in chat.
-3. Create a payout with `POST /v1/payouts`, inspect the recipient and amount, then approve it with
-   `POST /v1/payouts/:id/approve`. The worker submits only approved requests.
-4. For a refund, call `POST /v1/payments/:id/refund`; it targets the original sender and still
-   requires approval. Check the final transaction and the refund journal entry.
-5. Confirm `payout_attempts` contains the finalized outcome and `network_fee_records` contains the
-   exact yoctoNEAR fee. Configure a dated `NEAR/USD` rate before expecting a valued Network Fees
-   entry; without one Zetra raises an accounting issue rather than estimating.
+1. Fund a business wallet with the configured NEAR Testnet USDC and enough NEAR for gas. Add the
+   business account in Wallets and enable USDC. Add a vendor with a NEAR Testnet address, then create
+   and approve a bill for that vendor.
+2. Open the bill, select the funded business wallet, connect that same wallet, review the amount and
+   vendor account, and sign the `ft_transfer`. If needed, the wallet also signs the USDC contract's
+   minimum `storage_deposit` for the vendor account in the same transaction.
+3. Wait for Zetra to confirm finality. Verify the chain transaction and NEP-141 event against the
+   requested token, business sender, vendor receiver, amount and memo.
+4. Confirm the bill payment and journal entry are recorded once (Dr Accounts Payable / Cr USDC
+   wallet), and the bill's remaining balance changes by the confirmed amount only.
+5. To demonstrate a refund, open a finalized incoming payment and use its Refund action. Connect the
+   receiving business wallet, confirm the original payer and amount, and sign the return transfer.
+   Verify finality and the compensating refund journal entry.
+6. Confirm `payout_attempts` retains the finalized outcome and `network_fee_records` retains the exact
+   yoctoNEAR fee. If a vendor token account was newly registered, confirm the separate storage
+   deposit record. Configure a dated `NEAR/USD` rate before expecting valued gas/setup expense lines;
+   without one Zetra raises an accounting issue rather than estimating.
 
-If a submission fails before finality, the request remains auditable as `failed` and can be reviewed
-and re-approved after the signer or network issue is corrected; the worker never silently retries a
+Other approved payout requests can use the runtime signer. Keep
+`NEAR_TESTNET_PAYOUT_SIGNER_ID` and `NEAR_TESTNET_PAYOUT_PRIVATE_KEY` in the runtime secret manager
+only, never in source control or chat. The worker must use the account matching the configured payout
+wallet. Do not treat a worker or local simulation as a wallet-signed testnet payment.
+
+For worker-signed payouts, a submission failure remains auditable as `failed` and can be reviewed and
+re-approved after the signer or network issue is corrected; the worker never silently retries a
 request that was not approved. A worker crash during an RPC call leaves the request `submitting`
 instead of guessing whether funds moved; inspect the chain before any manual retry.
 

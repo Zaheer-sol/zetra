@@ -227,8 +227,18 @@ export const createPayoutInput = z.object({
   payment_id: z.string().max(64).optional(),
   invoice_id: z.string().max(64).optional(),
   vendor_id: z.string().max(64).optional(),
+  bill_id: z.string().max(64).optional(),
   idempotency_key: z.string().trim().min(8).max(120)
 });
+
+export const vendorPayoutPreflightInput = z.object({
+  wallet_id: z.string().min(1).max(64),
+  bill_id: z.string().min(1).max(64),
+  vendor_id: z.string().min(1).max(64),
+  recipient: accountAddress,
+  amount: decimalAmount
+});
+export const payoutWalletSubmissionInput = z.object({ transaction_hash: z.string().trim().min(32).max(128).regex(/^[A-Za-z0-9]+$/) });
 
 export const payoutActionInput = z.object({ reason: z.string().trim().max(500).optional() }).default({});
 export const refundInput = z.object({
@@ -237,7 +247,7 @@ export const refundInput = z.object({
   idempotency_key: z.string().trim().min(8).max(120)
 });
 export const refundWalletConfirmationInput = z.object({ transaction_hash: z.string().trim().min(32).max(128).regex(/^[A-Za-z0-9]+$/) });
-export const payoutListQuery = listQuery.extend({ status: z.enum(["pending_approval", "approved", "submitting", "submitted", "confirmed", "failed", "cancelled"]).optional() });
+export const payoutListQuery = listQuery.extend({ status: z.enum(["pending_approval", "approved", "submitting", "submitted", "confirmed", "failed", "cancelled"]).optional(), bill_id: z.string().max(64).optional() });
 
 export const paymentSourceEventListQuery = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50) });
 
