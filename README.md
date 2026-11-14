@@ -34,6 +34,10 @@ merchant collection, reconciliation, business accounting, wallet-signed refunds 
 payments. Stripe Checkout receipts can also enter the books when Stripe credentials are configured.
 This is not a fiat payout or remittance product.
 
+## Other independent project disclosure
+
+The participant submitting Zetra is also submitting **Rylta** as a separate, independent hackathon project. See the [Rylta live application](https://rylta-production.up.railway.app/).
+
 ## Zeti AI assistant
 
 Zeti is available in the console sidebar and through **Ask Zeti**. Ask about invoice and payment
