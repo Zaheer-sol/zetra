@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
+import { InvalidAuthTokenError, PrivyClient } from "@privy-io/node";
 import { z } from "zod";
 import { appEnv } from "@zetra/config";
-import { withGlobal, withSystem, withTenant } from "@zetra/database";
+import { isUniqueViolation, withGlobal, withSystem, withTenant } from "@zetra/database";
 import { addMember, createOrganization, createUser } from "@zetra/engine";
 import { acceptInvitationInput, createOrganizationInput, forgotPasswordInput, loginInput, newId, resetPasswordInput, signupInput } from "@zetra/schemas";
 import { DUMMY_PASSWORD_HASH, hashIp, hashPassword, randomToken, sha256Hex, verifyPassword } from "@zetra/security";
@@ -12,6 +13,19 @@ import { permissionsFor } from "../lib/principal";
 import { parse } from "../lib/route";
 
 /** Authentication, session and workspace-membership endpoints for the console. */
+const privyIdentityInput = z.object({
+  identity_token: z.string().min(40).max(20_000),
+  name: z.string().trim().min(1).max(120).optional()
+});
+
+let cachedPrivyClient: PrivyClient | undefined;
+function getPrivyClient(): PrivyClient | undefined {
+  const env = appEnv();
+  if (!env.PRIVY_APP_SECRET) return undefined;
+  cachedPrivyClient ??= new PrivyClient({ appId: env.PRIVY_APP_ID, appSecret: env.PRIVY_APP_SECRET });
+  return cachedPrivyClient;
+}
+
 export function authRoutes(app: FastifyInstance) {
   const authLimit = { rateLimit: { max: appEnv().AUTH_RATE_LIMIT_PER_MINUTE, timeWindow: "1 minute" } };
 
@@ -22,6 +36,98 @@ export function authRoutes(app: FastifyInstance) {
     if (input.business_name) organizationId = (await createOrganization({ name: input.business_name, ownerUserId: user.id, ownerLabel: user.email })).id;
     await createSession(request, reply, user.id, organizationId);
     return reply.code(201).send({ user: { id: user.id, email: user.email, name: user.name }, organization_id: organizationId });
+  });
+
+  app.post("/v1/auth/privy", { config: authLimit, schema: { tags: ["auth"], summary: "Sign in or create an account with Privy" } }, async (request, reply) => {
+    const input = parse(privyIdentityInput, request.body, "body");
+    const privy = getPrivyClient();
+    if (!privy) {
+      throw new ApiError(503, "privy_not_configured", "Privy sign-in is not configured on the API. Set PRIVY_APP_SECRET in the API environment, then restart the service.");
+    }
+
+    let identity;
+    try {
+      // The SDK validates the identity-token signature, issuer and app audience before exposing claims.
+      identity = await privy.users().get({ id_token: input.identity_token });
+    } catch (error) {
+      if (error instanceof InvalidAuthTokenError) {
+        throw new ApiError(401, "invalid_privy_identity", "This Privy sign-in could not be verified. Please sign in again.");
+      }
+      request.log.warn({ error_type: error instanceof Error ? error.name : "unknown" }, "Privy identity verification unavailable");
+      throw new ApiError(503, "privy_unavailable", "Could not verify sign-in with Privy right now. Please try again.");
+    }
+
+    let verifiedEmail: string | undefined;
+    let googleName: string | undefined;
+    for (const account of identity.linked_accounts) {
+      if (account.type === "email" && account.verified_at > 0) verifiedEmail ??= account.address;
+      if (account.type === "google_oauth" && account.verified_at > 0) {
+        verifiedEmail ??= account.email;
+        googleName ??= account.name ?? undefined;
+      }
+    }
+    const email = verifiedEmail?.trim().toLowerCase();
+    if (identity.is_guest || !email) {
+      throw new ApiError(401, "verified_email_required", "Use a verified email address with Privy to create or access a Zetra account.");
+    }
+    const name = input.name?.trim() || googleName?.trim() || email.split("@")[0] || "Zetra user";
+
+    let account: { id: string; email: string; name: string | null; default_environment: string; privy_user_id: string };
+    try {
+      account = await withGlobal(async (c) => {
+        const byPrivyId = (await c.query<{ id: string; email: string; name: string | null; default_environment: string; privy_user_id: string }>(
+          "SELECT id, email, name, default_environment, privy_user_id FROM users WHERE privy_user_id = $1 FOR UPDATE",
+          [identity.id]
+        )).rows[0];
+
+        if (byPrivyId) {
+          const emailOwner = (await c.query<{ id: string }>("SELECT id FROM users WHERE lower(email) = $1 LIMIT 1", [email])).rows[0];
+          if (emailOwner && emailOwner.id !== byPrivyId.id) {
+            throw new ApiError(409, "email_in_use", "This verified email belongs to another Zetra account. Sign in with that account or contact support.");
+          }
+          if (byPrivyId.email.toLowerCase() !== email) {
+            await c.query("UPDATE users SET email = $1, name = COALESCE(NULLIF(name, ''), $2), updated_at = now() WHERE id = $3", [email, name, byPrivyId.id]);
+            return { ...byPrivyId, email, name: byPrivyId.name || name };
+          }
+          return byPrivyId;
+        }
+
+        const byEmail = (await c.query<{ id: string; email: string; name: string | null; default_environment: string; privy_user_id: string | null }>(
+          "SELECT id, email, name, default_environment, privy_user_id FROM users WHERE lower(email) = $1 ORDER BY created_at LIMIT 1 FOR UPDATE",
+          [email]
+        )).rows[0];
+        if (byEmail) {
+          if (byEmail.privy_user_id && byEmail.privy_user_id !== identity.id) {
+            throw new ApiError(409, "identity_already_linked", "This email is already connected to a different Privy identity.");
+          }
+          await c.query("UPDATE users SET privy_user_id = $1, name = COALESCE(NULLIF(name, ''), $2), updated_at = now() WHERE id = $3", [identity.id, name, byEmail.id]);
+          return { ...byEmail, name: byEmail.name || name, privy_user_id: identity.id };
+        }
+
+        const id = newId("user");
+        const created = (await c.query<{ id: string; email: string; name: string | null; default_environment: string }>(
+          "INSERT INTO users (id, email, name, password_hash, privy_user_id) VALUES ($1,$2,$3,NULL,$4) RETURNING id, email, name, default_environment",
+          [id, email, name, identity.id]
+        )).rows[0]!;
+        return { ...created, privy_user_id: identity.id };
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      // A simultaneous first login may have inserted the same email or Privy ID. Re-read and
+      // accept only when both identifiers now point to the same account.
+      const raced = (await withGlobal((c) => c.query<{ id: string; email: string; name: string | null; default_environment: string; privy_user_id: string | null }>(
+        "SELECT id, email, name, default_environment, privy_user_id FROM users WHERE privy_user_id = $1 OR lower(email) = $2 ORDER BY (privy_user_id = $1) DESC LIMIT 1",
+        [identity.id, email]
+      ))).rows[0];
+      if (!raced || raced.privy_user_id !== identity.id || raced.email.toLowerCase() !== email) {
+        throw new ApiError(409, "identity_conflict", "This verified email is already associated with another account. Sign in with the existing account or contact support.");
+      }
+      account = { ...raced, privy_user_id: identity.id };
+    }
+
+    const organizationId = await firstOrganization(account.id);
+    await createSession(request, reply, account.id, organizationId, account.default_environment === "test" ? "test" : "live");
+    return reply.send({ user: { id: account.id, email: account.email, name: account.name }, organization_id: organizationId });
   });
 
   app.post("/v1/auth/login", { config: authLimit, schema: { tags: ["auth"], summary: "Sign in" } }, async (request, reply) => {

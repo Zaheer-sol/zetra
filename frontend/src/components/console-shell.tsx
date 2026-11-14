@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePrivy } from "@privy-io/react-auth";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useState, type ComponentType, type ReactNode } from "react";
 import {
@@ -306,8 +307,12 @@ function WorkspaceSwitcher() {
 
 function UserMenu() {
   const { me } = useSession();
+  const { logout: logoutPrivy } = usePrivy();
   const logout = async () => {
-    await api("/v1/auth/logout", { method: "POST" }).catch(() => undefined);
+    await Promise.all([
+      api("/v1/auth/logout", { method: "POST" }).catch(() => undefined),
+      logoutPrivy().catch(() => undefined)
+    ]);
     window.location.href = "/login";
   };
   return (

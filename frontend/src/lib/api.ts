@@ -36,7 +36,7 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
   }
   if (!res.ok) {
     const e = data?.error;
-    if (res.status === 502 || res.status === 503 || res.status === 504 || (!e && res.status >= 500)) {
+    if ((res.status === 502 || res.status === 503 || res.status === 504 || (!e && res.status >= 500)) && e?.code !== "privy_not_configured" && e?.code !== "privy_unavailable") {
       throw new ApiError(res.status, "api_unavailable", "The Zetra API isn't responding. Your data is safe. Try again in a moment.");
     }
     throw new ApiError(res.status, e?.code ?? "error", e?.message ?? "Something went wrong.", e?.request_id, e?.details);

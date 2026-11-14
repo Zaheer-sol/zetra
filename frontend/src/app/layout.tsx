@@ -4,6 +4,7 @@ import "./globals.css";
 import { MotionProvider } from "@/components/motion";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ZetraPrivyProvider } from "@/components/privy-provider";
 
 // Fonts ship with the app (Latin subsets, SIL Open Font License) so builds never depend on reaching Google Fonts.
 const inter = localFont({ src: "../fonts/inter-latin-variable.woff2", weight: "100 900", variable: "--font-inter", display: "swap" });
@@ -49,12 +50,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a href="#main" className="fixed top-[-40px] left-3 z-[100] rounded-lg bg-foreground px-3 py-2 text-background focus:top-3">
           Skip to content
         </a>
-        <MotionProvider>
-          <TooltipProvider delayDuration={300}>
-            {children}
-            <Toaster position="bottom-right" richColors={false} closeButton={false} />
-          </TooltipProvider>
-        </MotionProvider>
+        <ZetraPrivyProvider>
+          <MotionProvider>
+            <TooltipProvider delayDuration={300}>
+              {children}
+              <Toaster position="bottom-right" richColors={false} closeButton={false} />
+            </TooltipProvider>
+          </MotionProvider>
+        </ZetraPrivyProvider>
       </body>
     </html>
   );

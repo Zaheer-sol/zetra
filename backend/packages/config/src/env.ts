@@ -22,6 +22,10 @@ const schema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(300),
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(20),
+  /** Public Privy app identifier used to verify signed identity tokens. */
+  PRIVY_APP_ID: z.string().trim().min(1).default("cmwg01q7v02ab0gl6szuuj882"),
+  /** Secret for the Privy server SDK. Keep only in the API runtime secret store. */
+  PRIVY_APP_SECRET: z.string().trim().optional(),
   WEBHOOK_MAX_ATTEMPTS: z.coerce.number().int().positive().default(10),
   WEBHOOK_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
   WEBHOOK_ALLOW_PRIVATE_URLS: z.string().optional(),

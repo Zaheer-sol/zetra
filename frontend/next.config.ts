@@ -16,10 +16,11 @@ const securityHeaders = [
       // Wallet icons on the payment page come from wallet providers.
       "img-src 'self' data: https:",
       "font-src 'self' data:",
-      // Wallet checkout talks to public chain RPCs from the browser.
-      "connect-src 'self' https: wss: http://127.0.0.1:* http://localhost:* ws://localhost:*",
-      // Email checkout (Dynamic embedded wallets) signs in inside Dynamic's own frames.
-      "frame-src 'self' https://*.dynamicauth.com https://*.dynamic.xyz",
+      // Wallet checkout and Privy authentication talk to their public services from the browser.
+      "connect-src 'self' https://auth.privy.io https: wss: http://127.0.0.1:* http://localhost:* ws://localhost:*",
+      // Privy authentication and existing Dynamic embedded-wallet flows render in their own frames.
+      "frame-src 'self' https://auth.privy.io https://*.dynamicauth.com https://*.dynamic.xyz",
+      "child-src 'self' https://auth.privy.io",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'"
