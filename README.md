@@ -1,5 +1,7 @@
 # Zetra
 
+Live application: [zetra-web-production.up.railway.app](https://zetra-web-production.up.railway.app/)
+
 Zetra is a NEAR stablecoin receivables, payables and accounting application. It monitors business-owned
 NEAR accounts for supported finalized NEP-141 transfers, matches receipts to invoices, records
 uncertain receipts for review, and posts balanced journal entries.
@@ -32,10 +34,22 @@ merchant collection, reconciliation, business accounting, wallet-signed refunds 
 payments. Stripe Checkout receipts can also enter the books when Stripe credentials are configured.
 This is not a fiat payout or remittance product.
 
+## Zeti AI assistant
+
+Zeti is available in the console sidebar and through **Ask Zeti**. Ask about invoice and payment
+status, open balances, payment totals or items that need review. Zeti can also prepare an invoice
+payment request from plain-language instructions and ask for confirmation before creating it.
+
+Zeti reads business facts through the same authorized API as the console. It does not invent amounts
+or post accounting entries directly. The backend applies role checks, deterministic accounting rules
+and audit logging to confirmed actions. An optional language model can translate an unfamiliar
+message into a supported request; it sees only the message, not business records or balances.
+
 ## Implemented and not implemented
 
 | Area | Current status |
 | --- | --- |
+| Zeti AI assistant | Answers questions about invoices, payments and review items using workspace records; prepares supported payment requests for user confirmation; optional language-model fallback is limited to interpreting the request |
 | NEAR USDC invoice collection | Direct wallet-signed NEP-141 transfer on an enabled network; finalized transaction verification and recovery |
 | Payment reconciliation | Exact, partial, split, overpaid, duplicate and ambiguous handling; payments after an invoice due date or payment-link expiry go to review |
 | Business accounting | Double-entry journals, trial balance, profit and loss, balance sheet, cash flow and receivables/payables reports |
@@ -91,25 +105,6 @@ The API listens on [http://localhost:4000](http://localhost:4000). The seeded Ze
 contains sample records. Its simulated payments do not move funds. A new signup creates a separate
 Live workspace without the demo's sample records; its onboarding may add a receiving wallet.
 
-## Judge walkthrough: do X → see Y
-
-1. **Open** `/login` and sign in with the local demo account → **see** the seeded Zetra Demo workspace.
-2. **Open** Developers → Demo scenarios and run a partial, overpayment or duplicate scenario → **see**
-   a clearly labelled simulation processed through the reconciliation workflow; no chain transaction
-   is created.
-3. **Open** the resulting payment → **see** its evidence and matching decision. Applied payments link
-   to invoice allocations and, after successful posting, journal entries; posting failures are surfaced
-   as accounting issues, while uncertain cases remain in review without being posted as invoice revenue.
-4. **Open** Books → Reports → **see** financial statements aggregated from posted journal entries,
-   plus receivables and payables aging reports with control-account tie-outs.
-5. **Run** `npm run demo:verify` → **see** the deterministic seeded-accounting proof in the terminal.
-
-The seeded proof checks that `DEMO-001` and `DEMO-002` are reconciled, `DEMO-003` remains an open
-`$1,550.00` receivable, simulated receipts are applied once, `$740.00` of unidentified money remains
-a review liability, Accounts Receivable ties to the subledger, trial-balance debits and credits both
-equal `$6,730.00`, the balance sheet balances, cash flow reconciles, and CSV output is generated from
-the same ledger.
-
 ## Try a real NEAR testnet payment
 
 This is separate from the local demo. It requires an enabled NEAR testnet configuration, a business
@@ -136,9 +131,32 @@ before changing it. Testnet tokens have no mainnet value.
    [the funded testnet runbook](docs/testnet-runbook.md) → **see** the finalized payment evidence,
    invoice allocation and accounting entries. Verification retries the submitted hash; it does not
    send a second transfer.
+6. **Ask Zeti** about the invoice → **see** its recorded payment status and transaction details from
+   the same workspace records.
 
 Only the recorded NEAR transaction and its stored finalized evidence demonstrate on-chain payment.
 Local simulations, tests, deployment URLs and the Books-attestation deployment are not payment proof.
+
+## Explore the seeded workspace
+
+This local workspace is for exploring the accounting and reconciliation screens. Its sample
+payments are simulations and do not create chain transactions.
+
+1. **Sign in** at `/login` with the local demo account → **see** the seeded Zetra Demo workspace.
+2. **Open** Developers → Demo scenarios and run a partial, overpayment or duplicate scenario →
+   **see** the reconciliation result labelled as a simulation.
+3. **Open** the resulting payment → **see** its evidence and matching decision. Applied payments link
+   to invoice allocations and, after successful posting, journal entries. Uncertain payments stay in
+   review until a person resolves them.
+4. **Open** Books → Reports → **see** financial statements from posted journal entries, receivables
+   and payables aging, and control-account tie-outs.
+5. **Run** `npm run demo:verify` → **see** the seeded accounting proof in the terminal.
+
+The proof checks that `DEMO-001` and `DEMO-002` are reconciled, `DEMO-003` remains an open `$1,550.00`
+receivable, simulated receipts are applied once, `$740.00` of unidentified money remains a review
+liability, Accounts Receivable ties to the subledger, trial-balance debits and credits both equal
+`$6,730.00`, the balance sheet balances, cash flow reconciles, and CSV output is generated from the
+same ledger.
 
 ## Verify the code
 
@@ -183,6 +201,7 @@ proof.
 - [NEAR integration](docs/near.md)
 - [Payment-source adapters](docs/payment-sources.md)
 - [Security](docs/security.md)
+- [Zeti assistant](docs/assistant.md)
 - [Verification](docs/verification.md)
 - [Demo walkthrough](docs/demo-walkthrough.md)
 - [Testnet runbook](docs/testnet-runbook.md)
