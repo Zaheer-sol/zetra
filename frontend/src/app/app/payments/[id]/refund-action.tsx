@@ -19,6 +19,7 @@ type RefundPayment = {
   sender: string;
   source: string;
   simulated: boolean;
+  explorer_url?: string | null;
   asset: { symbol: string; decimals: number; address: string };
   wallet: { address: string };
 };
@@ -69,6 +70,9 @@ export function RefundAction({ payment, onConfirmed }: { payment: RefundPayment;
   const network = payment.testnet ? "testnet" : "mainnet";
   const allowed = !payment.simulated && payment.source !== "simulated" && ["matched", "partial", "overpaid", "needs_review", "dismissed"].includes(payment.status);
   const authorized = can("financials:write") && can("financials:approve");
+  const refundExplorerUrl = transactionHash && payment.explorer_url
+    ? payment.explorer_url.replace(/\/txns\/[^/?#]+(?:[?#].*)?$/, `/txns/${encodeURIComponent(transactionHash)}`)
+    : null;
 
   useEffect(() => {
     const saved = readRecovery(payment.id);
@@ -177,7 +181,7 @@ export function RefundAction({ payment, onConfirmed }: { payment: RefundPayment;
   };
 
   if (!allowed || !authorized) return null;
-  if (stage === "done" && transactionHash) return <div className="rounded-xl bg-success/10 px-3 py-2.5 text-sm text-success" role="status"><CheckCircle2 className="mr-1 inline size-4" /> Refund finalized and recorded. Transaction: <span className="font-mono">{shortAddress(transactionHash)}</span></div>;
+  if (stage === "done" && transactionHash) return <div className="rounded-xl bg-success/10 px-3 py-2.5 text-sm text-success" role="status"><CheckCircle2 className="mr-1 inline size-4" /> Refund finalized and recorded. Transaction: {refundExplorerUrl ? <a className="font-mono underline" href={refundExplorerUrl} target="_blank" rel="noreferrer noopener">{shortAddress(transactionHash)}</a> : <span className="font-mono">{shortAddress(transactionHash)}</span>}</div>;
 
   return <div className="grid gap-3 rounded-2xl border p-4">
     <div><h3 className="font-semibold">Refund this payment</h3><p className="mt-1 text-sm text-muted-foreground">Send USDC from the business wallet back to the original payer. Zetra never signs or holds the business wallet key.</p></div>
@@ -185,6 +189,7 @@ export function RefundAction({ payment, onConfirmed }: { payment: RefundPayment;
     <div className="grid gap-1 rounded-xl bg-muted px-3 py-2.5 text-xs"><span className="text-muted-foreground">Refund destination · original payer</span><span className="break-all font-mono">{payment.sender}</span><span className="mt-1 text-muted-foreground">Refund source · business receiving wallet</span><span className="break-all font-mono">{payment.wallet.address}</span></div>
     {accountId ? <div className="rounded-xl bg-muted px-3 py-2 text-sm">Business wallet connected: <span className="font-mono">{shortAddress(accountId)}</span></div> : null}
     {transactionHash && request && stage !== "done" ? <Button variant="secondary" onClick={() => recordRefund(request, transactionHash)} disabled={stage !== "idle"}><RotateCcw /> Retry verification (do not resend)</Button> : accountId ? <Button onClick={submitRefund} disabled={stage !== "idle" || !idempotencyKey || (!!request && !!transactionHash)}><Wallet />{stage === "preparing" ? "Preparing refund…" : stage === "signing" ? "Confirm in your wallet…" : stage === "verifying" ? "Verifying finality…" : `Refund ${money(amount, { currency: false })} ${payment.asset.symbol}`}</Button> : <Button variant="secondary" onClick={connect} disabled={stage !== "idle"}><Wallet />{stage === "connecting" ? "Connecting…" : "Connect business wallet"}</Button>}
+    {transactionHash && request && stage !== "done" && <p className="text-xs text-muted-foreground" role="status">Refund transaction submitted; Zetra has not recorded the refund until finality is verified. {refundExplorerUrl && <a className="text-primary underline" href={refundExplorerUrl} target="_blank" rel="noreferrer noopener">View transaction</a>}</p>}
     {error && <p className="rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive" role="alert"><AlertCircle className="mr-1 inline size-4" />{error}</p>}
     <p className="text-xs text-muted-foreground">Your wallet will show the token contract and payer address. Review the amount before signing. NEAR is needed for gas.</p>
   </div>;

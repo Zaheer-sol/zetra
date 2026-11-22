@@ -56,6 +56,18 @@ describe("exact payment: observe → confirm → match", () => {
     expect((await inv(ws, target.id)).status).toBe("paid");
     const [decision] = await q(ws, "SELECT explanation FROM match_decisions WHERE payment_id = $1 AND stage = 'final'", [payment.id]);
     expect(decision.explanation).toContain("Referenced by a NEAR transfer memo");
+    const entries = await q(ws,
+      `SELECT e.status, COALESCE(SUM(l.debit), 0)::text AS debits, COALESCE(SUM(l.credit), 0)::text AS credits
+         FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+        WHERE l.payment_id = $1 GROUP BY e.id ORDER BY e.id`,
+      [payment.id]
+    );
+    expect(entries).toHaveLength(2); // receipt plus invoice application
+    for (const entry of entries) {
+      expect(entry.status).toBe("posted");
+      expect(BigInt(entry.debits)).toBeGreaterThan(0n);
+      expect(entry.debits).toBe(entry.credits);
+    }
   });
 });
 

@@ -29,14 +29,10 @@ wallet; a payer account does not need to be registered with Zetra. A NEP-141 tok
 registration on the token contract, which checkout includes in the wallet-signed transaction when
 required. The business controls its receiving account and its keys.
 
-The Real-World Money track is `realworld`. Zetra currently covers NEAR stablecoin invoicing and
-merchant collection, reconciliation, business accounting, wallet-signed refunds and vendor bill
-payments. Stripe Checkout receipts can also enter the books when Stripe credentials are configured.
-This is not a fiat payout or remittance product.
-
-## Other independent project disclosure
-
-The participant submitting Zetra is also submitting **Rylta** as a separate, independent hackathon project. See the [Rylta live application](https://rylta-production.up.railway.app/).
+Businesses use Zetra to collect NEAR stablecoin payments, reconcile receipts, maintain their books,
+refund customers and pay approved vendor bills. Stripe Checkout receipts can also enter the books
+when Stripe credentials are configured. Zetra does not currently convert stablecoins to fiat or pay
+funds into local bank accounts.
 
 ## Zeti AI assistant
 
@@ -64,14 +60,12 @@ message into a supported request; it sees only the message, not business records
 | NEAR payout gas and token-account setup costs | Exact yoctoNEAR costs are retained; USD expense posting requires a dated NEAR/USD rate or explicit fallback, otherwise an accounting issue is raised |
 | Stripe receipts | Successful USD Checkout receipts can be reconciled through a processor-clearing account; requires a Stripe source plus API and webhook secrets |
 | NEAR Books attestation | Optional Rust contract and API integration; testnet deployment is documented; a contract deployment is not a merchant payment or a published close attestation; contract is not externally audited |
-| NEAR Intents / 1Click | Not integrated. The official 1Click quickstart says there is no testnet version; cross-chain payments are not claimed. |
-| NEAR meta-transaction relayer | Not implemented; customers sign direct NEAR transactions in their wallets. |
+| Cross-chain payments | Not supported; payments currently use direct NEAR wallet-signed NEP-141 transfers. |
+| Transaction relayer | Not implemented; customers approve and sign transfers in their own NEAR wallets. |
 | Fiat payroll, local-bank payouts, fiat FX conversion and remittance certificates | Not implemented. |
 
-NEAR Intents, meta transactions and stablecoins are themes listed for the track. The current testable
-payment path uses NEAR stablecoins and direct NEP-141 wallet signing. Do not treat a simulation as an
-on-chain transfer. See the [official 1Click quickstart](https://docs.near-intents.org/integration/distribution-channels/1click-api/quickstart)
-for its testnet availability statement.
+The current payment flow uses NEAR stablecoins and direct NEP-141 wallet signing. Simulated activity
+is clearly labelled, isolated from live books and never moves tokens.
 
 ## Run locally
 
@@ -133,13 +127,12 @@ before changing it. Testnet tokens have no mainnet value.
    and testnet explorer.
 5. **Verify** the transaction hash on the payment page or follow
    [the funded testnet runbook](docs/testnet-runbook.md) → **see** the finalized payment evidence,
-   invoice allocation and accounting entries. Verification retries the submitted hash; it does not
-   send a second transfer.
+   invoice allocation and accounting entries. To reproduce the verification from a terminal, run
+   `npm run near:verify -- --payment-url '<hosted-payment-url>' --payer '<payer.testnet>' --tx '<transaction-hash>'`.
+   It may ingest the finalized payment into the workspace; re-verification is idempotent and does
+   not broadcast another transfer.
 6. **Ask Zeti** about the invoice → **see** its recorded payment status and transaction details from
    the same workspace records.
-
-Only the recorded NEAR transaction and its stored finalized evidence demonstrate on-chain payment.
-Local simulations, tests, deployment URLs and the Books-attestation deployment are not payment proof.
 
 ## Explore the seeded workspace
 

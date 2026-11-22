@@ -25,6 +25,8 @@
     "setup:local": "node scripts/setup-local.mjs",
     "demo:seed": "tsx scripts/seed-demo.ts",
     "demo:verify": "tsx scripts/verify-demo-accounting.ts",
+    "near:verify": "node scripts/verify-near-payment.mjs",
+    "test:near-proof": "node --test scripts/verify-near-payment.test.mjs",
     "verify:all": "npm run verify && npm run demo:verify",
     "db:migrate": "tsx backend/packages/database/src/migrate.ts",
     "db:reset": "tsx backend/packages/database/src/reset.ts && npm run db:migrate",

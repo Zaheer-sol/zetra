@@ -22,6 +22,16 @@ must not be represented as complete until every verification below passes.
 3. Open the hosted payment page and verify receiver, token, amount and `zetra:<invoice token>` memo.
 4. From the operator-controlled payer wallet, approve the standard NEP-141 transfer.
 5. Record the transaction hash outside secrets and wait for finality plus worker ingestion.
+6. Re-run Zetra's own finalized-transaction verification from the repository root:
+
+   ```bash
+   npm run near:verify -- --payment-url '<hosted-payment-url>' --payer '<payer.testnet>' --tx '<transaction-hash>'
+   ```
+
+   The command verifies the submitted hash through the hosted payment API and prints the invoice
+   disposition plus any stored real-transaction explorer evidence. It may ingest and reconcile the
+   finalized transfer; repeating verification is idempotent. It never sends a transfer or describes
+   a payment held for review as applied.
 
 ## Required evidence
 

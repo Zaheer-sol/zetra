@@ -48,6 +48,11 @@ It runs, in order:
 
 Use `npm run verify:all` to run both the repository proof and seeded accounting proof.
 
+The dependency-free `npm run test:near-proof` command checks the real-payment verification helper's
+input handling and its treatment of review outcomes. It uses fixtures and does not prove a chain
+transaction. To verify an actual testnet transfer, follow the funded testnet runbook and run
+`npm run near:verify` with the hosted payment URL, payer account and transaction hash.
+
 ## Manual browser walkthrough
 
 Follow [the demo walkthrough](demo-walkthrough.md) after starting the stack. The automated suite

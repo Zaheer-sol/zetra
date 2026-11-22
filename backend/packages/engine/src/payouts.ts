@@ -114,13 +114,26 @@ export async function createPayoutRequest(client: Client, organizationId: string
     throw new EngineError("bill_kind_mismatch", "Bills can only be paid with a vendor payout.", 422);
   }
   const id = newId(input.kind === "refund" ? "refund" : "outgoingTransfer");
-  await client.query(
+  const inserted = await client.query(
     `INSERT INTO payout_requests (id, organization_id, environment, kind, wallet_id, network_id, asset_id, token_address, recipient, amount, memo, payment_id, invoice_id, vendor_id, bill_id, idempotency_key, requested_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+     ON CONFLICT (organization_id, environment, idempotency_key) DO NOTHING
+     RETURNING *`,
     [id, organizationId, environment, input.kind, wallet.id, wallet.network_id, asset.id, asset.contractId, recipient, amount.toString(), memo, input.paymentId ?? null, invoiceId, vendorId, billId, input.idempotencyKey, actor.id ?? null]
   );
+  const created = inserted.rows[0] as Row | undefined;
+  if (!created) {
+    // The initial lookup is only a fast path. Resolve a concurrent request atomically rather than
+    // leaking a unique-constraint error (or creating a second transfer) to the caller.
+    const raced = (await client.query(
+      "SELECT * FROM payout_requests WHERE organization_id = $1 AND environment = $2 AND idempotency_key = $3",
+      [organizationId, environment, input.idempotencyKey]
+    )).rows[0] as Row | undefined;
+    if (raced) return raced;
+    throw new EngineError("payout_idempotency_conflict", "This payout request could not be saved safely. Retry with the same idempotency key.", 409);
+  }
   await audit(client, actor, { organizationId, environment, action: "payout_requested", objectType: "payout", objectId: id, next: { kind: input.kind, wallet_id: wallet.id, recipient, amount: amount.toString(), asset_id: asset.id } });
-  return (await client.query("SELECT * FROM payout_requests WHERE id = $1", [id])).rows[0] as Row;
+  return created;
 }
 
 /** Read real NEAR balances and NEP-141 storage requirements before a business signs a vendor bill payment. */
@@ -201,6 +214,10 @@ export async function createRefundRequest(client: Client, organizationId: string
   if (duplicate) return duplicate;
   const payment = (await client.query("SELECT * FROM payments WHERE id = $1 AND organization_id = $2 AND environment = $3 FOR UPDATE", [paymentId, organizationId, environment])).rows[0] as Row | undefined;
   if (!payment) throw new EngineError("payment_not_found", "No such payment.", 404);
+  // Serialize same-payment refund requests before checking the cumulative refund limit. A retry
+  // racing with the original request must return that request even if its amount is now reserved.
+  const afterLock = (await client.query("SELECT * FROM payout_requests WHERE organization_id = $1 AND environment = $2 AND idempotency_key = $3", [organizationId, environment, input.idempotencyKey])).rows[0] as Row | undefined;
+  if (afterLock) return afterLock;
   if (payment.source === "simulated" || !payment.transaction_hash || !payment.from_address) throw new EngineError("payment_not_refundable", "Simulated or incomplete payment evidence cannot be refunded on-chain.", 409);
   if (!["matched", "partial", "overpaid", "needs_review", "dismissed"].includes(payment.status)) throw new EngineError("payment_not_refundable", "Only a finalized payment can be refunded.", 409);
   const asset = payment.asset_id ? paymentAssetById(payment.asset_id)?.asset : undefined;
